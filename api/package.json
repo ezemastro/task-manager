@@ -4,9 +4,27 @@
   "description": "",
   "license": "ISC",
   "author": "",
-  "type": "modules",
-  "main": "app.ts",
+  "type": "module",
+  "main": "src/app.ts",
   "scripts": {
+    "dev": "ts-node --esm src/app.ts",
+    "start": "node --loader ts-node/esm src/app.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.7.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
   }
 }
