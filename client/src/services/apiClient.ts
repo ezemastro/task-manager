@@ -205,7 +205,7 @@ export interface UserFilters {
 class ApiClient {
   private baseURL: string;
 
-  constructor(baseURL: string = import.meta.env.VITE_PUBLIC_API_URL) {
+  constructor(baseURL: string = window.location.origin + '/api') {
     this.baseURL = baseURL;
   }
 
