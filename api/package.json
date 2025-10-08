@@ -4,11 +4,12 @@
   "description": "",
   "license": "ISC",
   "author": "",
-  "type": "module",
+  "type": "commonjs",
   "main": "src/app.ts",
   "scripts": {
-    "dev": "ts-node --esm src/app.ts",
+    "dev": "ts-node src/app.ts",
     "start": "node --loader ts-node/esm src/app.ts",
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
