@@ -121,7 +121,6 @@ export default function ProjectDetail() {
   const totalStages = stages.length;
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
   const allStagesCompleted = totalStages > 0 && completedStages === totalStages;
-  const canCreateNewStage = allStagesCompleted || totalStages === 0;
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -210,7 +209,7 @@ export default function ProjectDetail() {
         <Button
           variant="contained"
           onClick={() => setShowCreateStageModal(true)}
-          disabled={!canCreateNewStage || project.status === 'completed'}
+          disabled={project.status === 'completed'}
         >
           + Nueva Etapa
         </Button>
