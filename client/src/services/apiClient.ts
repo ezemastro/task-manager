@@ -309,6 +309,12 @@ class ApiClient {
     });
   }
 
+  async startStage(id: number): Promise<{ message: string }> {
+    return this.request(`/stages/${id}/start`, {
+      method: 'PUT',
+    });
+  }
+
   async deleteStage(id: number): Promise<{ message: string }> {
     return this.request(`/stages/${id}`, {
       method: 'DELETE',

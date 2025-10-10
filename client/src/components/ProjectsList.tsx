@@ -48,7 +48,7 @@ export default function ProjectsList() {
 
     try {
       const [projectsList, clientsList] = await Promise.all([
-        apiClient.getProjects(),
+        apiClient.getProjects({status: "active"}),
         apiClient.getClients(),
       ]);
       

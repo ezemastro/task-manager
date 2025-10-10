@@ -9,6 +9,7 @@ import StageDetail from './components/StageDetail';
 import ClientsManagement from './components/ClientsManagement';
 import StageTemplatesManagement from './components/StageTemplatesManagement';
 import AllStagesView from './components/AllStagesView';
+import CompletedProjectsView from './components/CompletedProjectsView';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
       <Routes>
         <Route path="/" element={<ProjectsList />} />
         <Route path="/stages" element={<AllStagesView />} />
+        <Route path="/completed-projects" element={<CompletedProjectsView />} />
         <Route path="/users" element={<UserDashboard />} />
         <Route path="/users-management" element={<UsersManagement />} />
         <Route path="/clients-management" element={<ClientsManagement />} />

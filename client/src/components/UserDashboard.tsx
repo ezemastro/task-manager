@@ -14,11 +14,11 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
-import AssignmentIcon from '@mui/icons-material/Assignment';
 import { apiClient, type User, type Stage } from '../services/apiClient';
 
 interface UserWithStages extends User {
   inProgressStages: Stage[];
+  pendingStages: Stage[];
 }
 
 export default function UserDashboard() {
@@ -37,7 +37,7 @@ export default function UserDashboard() {
       // Obtener todos los usuarios
       const users = await apiClient.getUsers();
       
-      // Para cada usuario, obtener sus etapas en progreso
+      // Para cada usuario, obtener sus etapas (en progreso y pendientes)
       const usersWithStagesData = await Promise.all(
         users.map(async (user) => {
           const stages = await apiClient.getStages({
@@ -46,13 +46,16 @@ export default function UserDashboard() {
           });
           return {
             ...user,
-            inProgressStages: stages.filter(s => !s.is_completed),
+            inProgressStages: stages.filter(s => s.start_date && !s.is_completed),
+            pendingStages: stages.filter(s => !s.start_date && !s.is_completed),
           };
         })
       );
 
-      // Filtrar solo usuarios con etapas en progreso
-      setUsersWithStages(usersWithStagesData.filter(u => u.inProgressStages.length > 0));
+      // Filtrar solo usuarios con etapas (en progreso o pendientes)
+      setUsersWithStages(usersWithStagesData.filter(u => 
+        u.inProgressStages.length > 0 || u.pendingStages.length > 0
+      ));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar datos';
       setError(message);
@@ -78,7 +81,7 @@ export default function UserDashboard() {
         Panel de Usuarios
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-        Usuarios con etapas activas asignadas
+        Usuarios con etapas asignadas (en progreso y pendientes)
       </Typography>
 
       {error && (
@@ -89,7 +92,7 @@ export default function UserDashboard() {
 
       {usersWithStages.length === 0 ? (
         <Alert severity="info">
-          No hay usuarios con etapas en progreso actualmente.
+          No hay usuarios con etapas asignadas actualmente.
         </Alert>
       ) : (
         <Stack spacing={3}>
@@ -109,56 +112,120 @@ export default function UserDashboard() {
                       {user.role && ` • ${user.role}`}
                     </Typography>
                   </Box>
-                  <Chip
-                    label={`${user.inProgressStages.length} ${user.inProgressStages.length === 1 ? 'etapa' : 'etapas'}`}
-                    color="primary"
-                    icon={<AssignmentIcon />}
-                  />
+                  <Stack direction="row" spacing={1}>
+                    {user.inProgressStages.length > 0 && (
+                      <Chip
+                        label={`${user.inProgressStages.length} en proceso`}
+                        color="primary"
+                        size="small"
+                      />
+                    )}
+                    {user.pendingStages.length > 0 && (
+                      <Chip
+                        label={`${user.pendingStages.length} pendiente${user.pendingStages.length > 1 ? 's' : ''}`}
+                        color="default"
+                        size="small"
+                      />
+                    )}
+                  </Stack>
                 </Stack>
 
                 <Divider sx={{ my: 2 }} />
 
-                <Typography variant="subtitle2" gutterBottom>
-                  Etapas Asignadas:
-                </Typography>
+                {/* Etapas en proceso */}
+                {user.inProgressStages.length > 0 && (
+                  <>
+                    <Typography variant="subtitle2" gutterBottom>
+                      En Proceso:
+                    </Typography>
 
-                <Stack spacing={1.5} sx={{ mt: 2 }}>
-                  {user.inProgressStages.map((stage) => (
-                    <Card
-                      key={stage.id}
-                      variant="outlined"
-                      component={RouterLink}
-                      to={`/stages/${stage.id}`}
-                      sx={{
-                        textDecoration: 'none',
-                        transition: 'all 0.2s',
-                        '&:hover': {
-                          boxShadow: 2,
-                          transform: 'translateY(-2px)',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Box>
-                            <Typography variant="subtitle2" component="div">
-                              {stage.name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {stage.project_name && `Proyecto: ${stage.project_name}`}
-                              {stage.order_number && ` • Etapa ${stage.order_number}`}
-                            </Typography>
-                          </Box>
-                          <Chip
-                            size="small"
-                            label={stage.is_completed ? 'Completada' : 'En Proceso'}
-                            color={stage.is_completed ? 'success' : 'primary'}
-                          />
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </Stack>
+                    <Stack spacing={1.5} sx={{ mt: 2 }}>
+                      {user.inProgressStages.map((stage) => (
+                        <Card
+                          key={stage.id}
+                          variant="outlined"
+                          component={RouterLink}
+                          to={`/stages/${stage.id}`}
+                          sx={{
+                            textDecoration: 'none',
+                            transition: 'all 0.2s',
+                            bgcolor: 'action.hover',
+                            '&:hover': {
+                              boxShadow: 2,
+                              transform: 'translateY(-2px)',
+                            },
+                          }}
+                        >
+                          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                              <Box>
+                                <Typography variant="subtitle2" component="div">
+                                  {stage.name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {stage.project_name && `Proyecto: ${stage.project_name}`}
+                                  {stage.order_number && ` • Etapa ${stage.order_number}`}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                size="small"
+                                label="En Proceso"
+                                color="primary"
+                              />
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Stack>
+                  </>
+                )}
+
+                {/* Etapas pendientes */}
+                {user.pendingStages.length > 0 && (
+                  <>
+                    <Typography variant="subtitle2" gutterBottom sx={{ mt: user.inProgressStages.length > 0 ? 2 : 0 }}>
+                      Pendientes de Iniciar:
+                    </Typography>
+
+                    <Stack spacing={1.5} sx={{ mt: 2 }}>
+                      {user.pendingStages.map((stage) => (
+                        <Card
+                          key={stage.id}
+                          variant="outlined"
+                          component={RouterLink}
+                          to={`/stages/${stage.id}`}
+                          sx={{
+                            textDecoration: 'none',
+                            transition: 'all 0.2s',
+                            '&:hover': {
+                              boxShadow: 2,
+                              transform: 'translateY(-2px)',
+                            },
+                          }}
+                        >
+                          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                              <Box>
+                                <Typography variant="subtitle2" component="div">
+                                  {stage.name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {stage.project_name && `Proyecto: ${stage.project_name}`}
+                                  {stage.order_number && ` • Etapa ${stage.order_number}`}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                size="small"
+                                label="Pendiente"
+                                color="default"
+                              />
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Stack>
+                  </>
+                )}
               </CardContent>
             </Card>
           ))}

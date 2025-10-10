@@ -14,11 +14,19 @@ import {
   LinearProgress,
   Divider,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import { apiClient, type Project, type Stage } from '../services/apiClient';
 import CreateStageModal from './CreateStageModal';
+import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
 
 export default function ProjectDetail() {
@@ -29,6 +37,9 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateStageModal, setShowCreateStageModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchProjectDetail = useCallback(async () => {
     if (!id) return;
@@ -60,6 +71,22 @@ export default function ProjectDetail() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al completar proyecto';
       setError(message);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!id) return;
+    
+    setDeleting(true);
+    try {
+      await apiClient.deleteProject(Number(id));
+      navigate('/');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar proyecto';
+      setError(message);
+      setShowDeleteDialog(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -105,19 +132,36 @@ export default function ProjectDetail() {
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
           {project.name}
         </Typography>
-        {project.status === 'completed' ? (
-          <Chip label="Completado" color="success" icon={<CheckCircleIcon />} />
-        ) : (
+        <Stack direction="row" spacing={1}>
           <Button
             variant="outlined"
-            color="success"
-            startIcon={<CheckCircleIcon />}
-            onClick={handleCompleteProject}
-            disabled={!allStagesCompleted}
+            startIcon={<EditIcon />}
+            onClick={() => setShowEditModal(true)}
           >
-            Marcar Proyecto como Completado
+            Editar
           </Button>
-        )}
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={() => setShowDeleteDialog(true)}
+          >
+            Eliminar
+          </Button>
+          {project.status === 'completed' ? (
+            <Chip label="Completado" color="success" icon={<CheckCircleIcon />} />
+          ) : (
+            <Button
+              variant="outlined"
+              color="success"
+              startIcon={<CheckCircleIcon />}
+              onClick={handleCompleteProject}
+              disabled={!allStagesCompleted}
+            >
+              Marcar Proyecto como Completado
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
       {error && (
@@ -178,8 +222,9 @@ export default function ProjectDetail() {
         </Alert>
       ) : (
         <Stack spacing={2}>
-          {stages.map((stage, index) => {
-            const isCurrentStage = !stage.is_completed && (index === 0 || stages[index - 1]?.is_completed);
+          {stages.map((stage) => {
+            // Una etapa está "en curso" si ha iniciado y no está completada
+            const isCurrentStage = !stage.is_completed && !!stage.start_date;
             
             return (
               <StageCard
@@ -199,6 +244,40 @@ export default function ProjectDetail() {
         onSuccess={handleStageCreated}
         projectId={Number(id)}
       />
+
+      <EditProjectModal
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={fetchProjectDetail}
+        projectId={Number(id)}
+        initialData={{
+          name: project.name,
+          description: project.description,
+          client_id: project.client_id,
+          deadline: project.deadline,
+        }}
+      />
+
+      <Dialog
+        open={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+      >
+        <DialogTitle>¿Eliminar proyecto?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Esta acción eliminará permanentemente el proyecto "{project.name}" y todas sus etapas asociadas.
+            Esta acción no se puede deshacer.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteProject} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

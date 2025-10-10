@@ -38,6 +38,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { apiClient, type StageDetail, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
+import EditStageModal from './EditStageModal';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +50,9 @@ export default function StageDetail() {
   const [error, setError] = useState('');
   const [showAddTagDialog, setShowAddTagDialog] = useState(false);
   const [showCreateTagDialog, setShowCreateTagDialog] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#1976d2');
@@ -112,6 +116,22 @@ export default function StageDetail() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al completar etapa';
       setError(message);
+    }
+  };
+
+  const handleDeleteStage = async () => {
+    if (!id) return;
+    
+    setDeleting(true);
+    try {
+      await apiClient.deleteStage(Number(id));
+      navigate(-1); // Volver a la vista anterior
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar etapa';
+      setError(message);
+      setShowDeleteDialog(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -265,6 +285,21 @@ export default function StageDetail() {
           color="default"
           variant="outlined"
         />
+        <Button
+          variant="outlined"
+          startIcon={<EditIcon />}
+          onClick={() => setShowEditModal(true)}
+        >
+          Editar
+        </Button>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={() => setShowDeleteDialog(true)}
+        >
+          Eliminar
+        </Button>
         {!stage.is_completed ? (
           <Button
             variant="contained"
@@ -690,6 +725,44 @@ export default function StageDetail() {
             disabled={!newTagName.trim()}
           >
             Crear
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de edición */}
+      {stage && (
+        <EditStageModal
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={fetchStageDetail}
+          stageId={stage.id}
+          initialData={{
+            name: stage.name,
+            responsible_id: stage.responsible_id,
+            start_date: stage.start_date,
+            estimated_end_date: stage.estimated_end_date,
+          }}
+        />
+      )}
+
+      {/* Diálogo de confirmación de eliminación */}
+      <Dialog
+        open={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+      >
+        <DialogTitle>¿Eliminar etapa?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Esta acción eliminará permanentemente la etapa "{stage?.name}".
+            Esta acción no se puede deshacer.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteStage} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Eliminando...' : 'Eliminar'}
           </Button>
         </DialogActions>
       </Dialog>

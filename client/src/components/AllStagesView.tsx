@@ -102,7 +102,7 @@ export default function AllStagesView() {
 
     // Filtro por estado
     if (statusFilter === 'active') {
-      filtered = filtered.filter((s) => !s.is_completed);
+      filtered = filtered.filter((s) => !s.is_completed && s.start_date); // Solo etapas con start_date (en proceso)
     } else if (statusFilter === 'completed') {
       filtered = filtered.filter((s) => s.is_completed);
     }

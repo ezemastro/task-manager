@@ -6,6 +6,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import BusinessIcon from '@mui/icons-material/Business';
 import LayersIcon from '@mui/icons-material/Layers';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 export default function NavigationBar() {
   const location = useLocation();
@@ -48,6 +49,20 @@ export default function NavigationBar() {
             }}
           >
             Todas las Etapas
+          </Button>
+
+          <Button
+            component={RouterLink}
+            to="/completed-projects"
+            color="inherit"
+            startIcon={<CheckCircleIcon />}
+            variant={isActive('/completed-projects') ? 'outlined' : 'text'}
+            sx={{ 
+              borderColor: 'white',
+              '&:hover': { borderColor: 'white' }
+            }}
+          >
+            Obras Completadas
           </Button>
 
           <Button

@@ -37,10 +37,13 @@ export default function ProjectCard({
   const totalStages = stages.length;
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
   
-  const currentStage = stages.find(stage => !stage.is_completed);
+  // Obtener TODAS las etapas en proceso (con start_date y no completadas)
+  const stagesInProgress = stages.filter(stage => stage.start_date && !stage.is_completed);
   
-  // Verificar si la etapa actual necesita datos (sin responsable o sin fechas)
-  const needsData = currentStage && (!currentStage.responsible_id || !currentStage.start_date || !currentStage.estimated_end_date);
+  // Verificar si alguna etapa en proceso necesita datos
+  const hasStagesNeedingData = stagesInProgress.some(
+    stage => !stage.responsible_id || !stage.estimated_end_date
+  );
   
   // Calcular si está atrasado
   const isOverdue = deadline && new Date(deadline) < new Date();
@@ -50,7 +53,7 @@ export default function ProjectCard({
       elevation={2} 
       sx={{ 
         mb: 2,
-        border: needsData ? '2px solid' : 'none',
+        border: hasStagesNeedingData ? '2px solid' : 'none',
         borderColor: 'warning.main',
         position: 'relative',
       }}
@@ -59,7 +62,7 @@ export default function ProjectCard({
         {/* Header compacto */}
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
           <Box sx={{ flexGrow: 1, pr: 1 }}>
-            <Typography variant="h6" component="h2" sx={{ mb: 0.5, lineHeight: 1.3 }}>
+            <Typography variant="h4" component="h2" sx={{ mb: 0.5, lineHeight: 1.3 }}>
               {projectName}
             </Typography>
             
@@ -130,79 +133,95 @@ export default function ProjectCard({
           />
         </Box>
 
-        {/* Etapa actual */}
-        {currentStage ? (
-          <Box sx={{ bgcolor: 'action.hover', p: 1.5, borderRadius: 1, mt: 1 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-              <Typography variant="caption" color="text.secondary" fontWeight="bold">
-                ETAPA ACTUAL
-              </Typography>
-              <Stack direction="row" spacing={0.5} alignItems="center">
-                {needsData && (
-                  <Chip 
-                    icon={<WarningIcon />}
-                    label="Faltan datos"
-                    color="warning"
-                    size="small"
-                    sx={{ height: 20, fontSize: '0.7rem' }}
-                  />
-                )}
-                <IconButton
-                  component={RouterLink}
-                  to={`/stages/${currentStage.id}`}
-                  color="primary"
-                  size="small"
-                  sx={{ padding: 0.5 }}
-                  aria-label="Ver detalles de la etapa"
+        {/* Etapas en proceso */}
+        {stagesInProgress.length > 0 ? (
+          <Box>
+            {stagesInProgress.map((stage, index) => {
+              const needsData = !stage.responsible_id || !stage.estimated_end_date;
+              
+              return (
+                <Box 
+                  key={stage.id} 
+                  sx={{ 
+                    bgcolor: 'action.hover', 
+                    p: 1.5, 
+                    borderRadius: 1, 
+                    mt: index === 0 ? 1 : 1.5 
+                  }}
                 >
-                  <OpenInNewIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-            </Stack>
-            <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
-              {currentStage.name}
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                      EN PROCESO - ETAPA {stage.order_number}
+                    </Typography>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      {needsData && (
+                        <Chip 
+                          icon={<WarningIcon />}
+                          label="Faltan datos"
+                          color="warning"
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.7rem' }}
+                        />
+                      )}
+                      <IconButton
+                        component={RouterLink}
+                        to={`/stages/${stage.id}`}
+                        color="primary"
+                        size="small"
+                        sx={{ padding: 0.5 }}
+                        aria-label="Ver detalles de la etapa"
+                      >
+                        <OpenInNewIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  </Stack>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                    {stage.name}
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 0.5 }}>
+                    <Chip 
+                      label={stage.responsible_name || 'Sin responsable'}
+                      size="small"
+                      color={stage.responsible_id ? 'default' : 'warning'}
+                      sx={{ height: 22, fontSize: '0.75rem' }}
+                    />
+                    {stage.estimated_end_date && (
+                      <Chip 
+                        label={`Hasta: ${new Date(stage.estimated_end_date).toLocaleDateString('es-ES')}`}
+                        size="small"
+                        sx={{ height: 22, fontSize: '0.75rem' }}
+                      />
+                    )}
+                  </Stack>
+                  
+                  {/* Último comentario */}
+                  {stage.recent_comments && stage.recent_comments.length > 0 && (
+                    <Box sx={{ mt: 1, p: 1, bgcolor: 'background.default', borderRadius: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                        Último comentario:
+                      </Typography>
+                      <Typography variant="caption" display="block" sx={{ mt: 0.3 }}>
+                        <strong>{stage.recent_comments[0].author}:</strong> {stage.recent_comments[0].content}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(stage.recent_comments[0].created_at).toLocaleDateString('es-ES', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        ) : stages.some(s => !s.is_completed) ? (
+          <Box sx={{ bgcolor: 'info.lighter', p: 1.5, borderRadius: 1, mt: 1 }}>
+            <Typography variant="body2" color="info.dark" fontWeight="bold">
+              ⏸ Etapas pendientes de iniciar
             </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 0.5 }}>
-              <Chip 
-                label={currentStage.responsible_name || 'Sin responsable'}
-                size="small"
-                color={currentStage.responsible_id ? 'default' : 'warning'}
-                sx={{ height: 22, fontSize: '0.75rem' }}
-              />
-              {currentStage.estimated_end_date && (
-                <Chip 
-                  label={`Hasta: ${new Date(currentStage.estimated_end_date).toLocaleDateString('es-ES')}`}
-                  size="small"
-                  sx={{ height: 22, fontSize: '0.75rem' }}
-                />
-              )}
-            </Stack>
-            
-            {/* Tags de la etapa actual */}
-            {currentStage.tags && currentStage.tags.length > 0 && (
-              <Stack direction="row" spacing={0.5} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-                {currentStage.tags.slice(0, 3).map((tag) => (
-                  <Chip
-                    key={tag.id}
-                    label={tag.name}
-                    size="small"
-                    sx={{
-                      height: 20,
-                      fontSize: '0.7rem',
-                      bgcolor: tag.color || 'default',
-                      color: '#fff',
-                    }}
-                  />
-                ))}
-                {currentStage.tags.length > 3 && (
-                  <Chip
-                    label={`+${currentStage.tags.length - 3}`}
-                    size="small"
-                    sx={{ height: 20, fontSize: '0.7rem' }}
-                  />
-                )}
-              </Stack>
-            )}
           </Box>
         ) : (
           <Box sx={{ bgcolor: 'success.light', p: 1.5, borderRadius: 1, mt: 1 }}>

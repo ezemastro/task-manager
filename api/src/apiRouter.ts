@@ -1027,104 +1027,33 @@ apiRouter.put('/stages/:id/complete', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Etapa no encontrada' });
     }
 
-    // Marcar la etapa como completada
+    // Marcar la etapa como completada - NO inicia la siguiente automáticamente
     const completeSql = 'UPDATE stages SET is_completed = 1, completed_date = CURRENT_TIMESTAMP WHERE id = ?';
     db.run(completeSql, [id], function (err) {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
 
-      // Buscar la siguiente plantilla de etapa
-      const nextTemplateSql = `
-        SELECT * FROM stage_templates 
-        WHERE order_number > ?
-        ORDER BY order_number
-        LIMIT 1
-      `;
-
-      db.get(nextTemplateSql, [currentStage.order_number], (err, nextTemplate: any) => {
-        if (!err && nextTemplate) {
-          // Verificar si ya existe una etapa con ese order_number en este proyecto
-          const checkExistingSql = `
-            SELECT id FROM stages 
-            WHERE project_id = ? AND order_number = ?
-          `;
-          
-          db.get(checkExistingSql, [currentStage.project_id, nextTemplate.order_number], (err, existingStage: any) => {
-            if (err) {
-              console.error('Error al verificar etapa existente:', err);
-              return res.json({ 
-                message: 'Etapa completada exitosamente',
-                next_stage_created: false
-              });
-            }
-
-            // Si ya existe la etapa, solo actualizamos su start_date
-            if (existingStage) {
-              const updateStartDateSql = 'UPDATE stages SET start_date = CURRENT_TIMESTAMP WHERE id = ?';
-              db.run(updateStartDateSql, [existingStage.id], function (err) {
-                if (err) {
-                  console.error('Error al actualizar fecha de inicio:', err);
-                }
-                res.json({ 
-                  message: 'Etapa completada exitosamente',
-                  next_stage_created: false,
-                  next_stage_updated: !err,
-                  next_stage_id: existingStage.id
-                });
-              });
-            } else {
-              // Crear la siguiente etapa basada en la plantilla (solo si no existe)
-              let estimatedEndDate = null;
-              if (nextTemplate.estimated_duration_days) {
-                const startDate = new Date();
-                startDate.setDate(startDate.getDate() + nextTemplate.estimated_duration_days);
-                estimatedEndDate = startDate.toISOString();
-              }
-
-              const insertStageSql = `
-                INSERT INTO stages (
-                  project_id, 
-                  template_id, 
-                  name, 
-                  responsible_id, 
-                  order_number, 
-                  estimated_end_date,
-                  start_date
-                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-              `;
-
-              db.run(
-                insertStageSql,
-                [
-                  currentStage.project_id,
-                  nextTemplate.id,
-                  nextTemplate.name,
-                  nextTemplate.default_responsible_id,
-                  nextTemplate.order_number,
-                  estimatedEndDate
-                ],
-                function (err) {
-                  if (err) {
-                    console.error('Error al crear la siguiente etapa:', err);
-                  }
-                  res.json({ 
-                    message: 'Etapa completada exitosamente',
-                    next_stage_created: !err,
-                    next_stage_id: !err ? this.lastID : null
-                  });
-                }
-              );
-            }
-          });
-        } else {
-          res.json({ 
-            message: 'Etapa completada exitosamente',
-            next_stage_created: false
-          });
-        }
+      res.json({ 
+        message: 'Etapa completada exitosamente'
       });
     });
+  });
+});
+
+// Iniciar una etapa manualmente
+apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const sql = 'UPDATE stages SET start_date = CURRENT_TIMESTAMP WHERE id = ? AND start_date IS NULL';
+  db.run(sql, [id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(400).json({ error: 'La etapa ya fue iniciada o no existe' });
+    }
+    res.json({ message: 'Etapa iniciada exitosamente' });
   });
 });
 

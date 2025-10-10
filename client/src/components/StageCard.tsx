@@ -50,6 +50,21 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
     }
   };
 
+  const handleStart = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      await apiClient.startStage(stage.id);
+      if (onCompleted) onCompleted();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al iniciar la etapa';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatDate = (date?: string) => {
     if (!date) return 'No definida';
     return new Date(date).toLocaleDateString('es-ES', {
@@ -231,8 +246,29 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
           </Alert>
         ) : null}
 
-        {/* Botón de completar */}
-        {isCurrentStage && !stage.is_completed ? (
+        {/* Botón de iniciar (si está pendiente) */}
+        {!stage.is_completed && !stage.start_date ? (
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={handleStart}
+            disabled={loading}
+            fullWidth
+            sx={{ mt: 3 }}
+          >
+            {loading ? (
+              <>
+                <CircularProgress size={20} sx={{ mr: 1 }} />
+                Iniciando...
+              </>
+            ) : (
+              '▶ Iniciar Etapa'
+            )}
+          </Button>
+        ) : null}
+
+        {/* Botón de completar (si está en proceso) */}
+        {isCurrentStage && !stage.is_completed && stage.start_date ? (
           <Button
             variant="contained"
             color="success"
