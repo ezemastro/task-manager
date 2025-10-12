@@ -262,8 +262,6 @@ export default function StageDetail() {
     tag => !stage.tags.some(stageTag => stageTag.id === tag.id)
   );
 
-  const needsData = !stage.is_completed && (!stage.responsible_id || !stage.start_date || !stage.estimated_end_date);
-
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
@@ -315,15 +313,6 @@ export default function StageDetail() {
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
-        </Alert>
-      )}
-
-      {needsData && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          <strong>Atención:</strong> Esta etapa necesita información adicional.
-          {!stage.responsible_id && ' Asignar un responsable.'}
-          {!stage.start_date && ' Establecer fecha de inicio.'}
-          {!stage.estimated_end_date && ' Establecer fecha estimada de finalización.'}
         </Alert>
       )}
 

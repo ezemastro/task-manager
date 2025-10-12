@@ -27,7 +27,6 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import WarningIcon from '@mui/icons-material/Warning';
 import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'status';
@@ -44,7 +43,6 @@ export default function AllStagesView() {
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all'); // all, active, completed
-  const [needsDataFilter, setNeedsDataFilter] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('project');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -107,13 +105,6 @@ export default function AllStagesView() {
       filtered = filtered.filter((s) => s.is_completed);
     }
 
-    // Filtro por datos faltantes
-    if (needsDataFilter) {
-      filtered = filtered.filter(
-        (s) => !s.is_completed && (!s.responsible_id || !s.start_date || !s.estimated_end_date)
-      );
-    }
-
     // Ordenar
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -137,7 +128,7 @@ export default function AllStagesView() {
     });
 
     return filtered;
-  }, [stages, searchTerm, selectedUser, selectedClient, statusFilter, needsDataFilter, sortBy]);
+  }, [stages, searchTerm, selectedUser, selectedClient, statusFilter, sortBy]);
 
   if (loading) {
     return (
@@ -162,9 +153,6 @@ export default function AllStagesView() {
       </Container>
     );
   }
-
-  const needsData = (stage: Stage) =>
-    stage.start_date && !stage.is_completed && (!stage.responsible_id || !stage.estimated_end_date);
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -283,20 +271,6 @@ export default function AllStagesView() {
                   </Select>
                 </FormControl>
               </Box>
-
-              <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
-                <FormControl fullWidth>
-                  <InputLabel>Filtros especiales</InputLabel>
-                  <Select
-                    value={needsDataFilter ? 'needs-data' : 'none'}
-                    onChange={(e) => setNeedsDataFilter(e.target.value === 'needs-data')}
-                    label="Filtros especiales"
-                  >
-                    <MenuItem value="none">Ninguno</MenuItem>
-                    <MenuItem value="needs-data">Solo etapas sin datos completos</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
             </Box>
 
             {/* Filtros activos */}
@@ -333,15 +307,7 @@ export default function AllStagesView() {
                     onDelete={() => setStatusFilter('all')}
                   />
                 )}
-                {needsDataFilter && (
-                  <Chip
-                    label="Sin datos completos"
-                    size="small"
-                    color="warning"
-                    onDelete={() => setNeedsDataFilter(false)}
-                  />
-                )}
-                {(searchTerm || selectedUser || selectedClient || statusFilter !== 'all' || needsDataFilter) && (
+                {(searchTerm || selectedUser || selectedClient || statusFilter !== 'all') && (
                   <Button
                     size="small"
                     onClick={() => {
@@ -349,7 +315,6 @@ export default function AllStagesView() {
                       setSelectedUser('');
                       setSelectedClient('');
                       setStatusFilter('all');
-                      setNeedsDataFilter(false);
                     }}
                   >
                     Limpiar todo
@@ -394,8 +359,7 @@ export default function AllStagesView() {
                 <TableRow 
                   key={stage.id}
                   sx={{
-                    bgcolor: needsData(stage) ? 'warning.lighter' : 'inherit',
-                    '&:hover': { bgcolor: needsData(stage) ? 'warning.light' : 'action.hover' },
+                    '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
                   <TableCell>
@@ -404,18 +368,7 @@ export default function AllStagesView() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">{stage.name}</Typography>
-                      {needsData(stage) && (
-                        <Chip
-                          icon={<WarningIcon />}
-                          label="Faltan datos"
-                          color="warning"
-                          size="small"
-                          sx={{ height: 20, fontSize: '0.7rem' }}
-                        />
-                      )}
-                    </Box>
+                    <Typography variant="body2">{stage.name}</Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" color={stage.responsible_id ? 'inherit' : 'warning.main'}>

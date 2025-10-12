@@ -1057,6 +1057,22 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
   });
 });
 
+// Desmarcar una etapa como completada (reabrirla)
+apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const sql = 'UPDATE stages SET is_completed = 0, completed_date = NULL WHERE id = ? AND is_completed = 1';
+  db.run(sql, [id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(400).json({ error: 'La etapa no está completada o no existe' });
+    }
+    res.json({ message: 'Etapa reabierta exitosamente' });
+  });
+});
+
 // Actualizar una etapa
 apiRouter.put('/stages/:id', (req: Request, res: Response) => {
   const { id } = req.params;

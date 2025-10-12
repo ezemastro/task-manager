@@ -12,7 +12,6 @@ import {
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BusinessIcon from '@mui/icons-material/Business';
 import EventIcon from '@mui/icons-material/Event';
-import WarningIcon from '@mui/icons-material/Warning';
 import type { Stage } from '../services/apiClient';
 
 interface ProjectCardProps {
@@ -40,11 +39,6 @@ export default function ProjectCard({
   // Obtener TODAS las etapas en proceso (con start_date y no completadas)
   const stagesInProgress = stages.filter(stage => stage.start_date && !stage.is_completed);
   
-  // Verificar si alguna etapa en proceso necesita datos
-  const hasStagesNeedingData = stagesInProgress.some(
-    stage => !stage.responsible_id || !stage.estimated_end_date
-  );
-  
   // Calcular si está atrasado
   const isOverdue = deadline && new Date(deadline) < new Date();
 
@@ -53,8 +47,6 @@ export default function ProjectCard({
       elevation={2} 
       sx={{ 
         mb: 2,
-        border: hasStagesNeedingData ? '2px solid' : 'none',
-        borderColor: 'warning.main',
         position: 'relative',
       }}
     >
@@ -137,8 +129,6 @@ export default function ProjectCard({
         {stagesInProgress.length > 0 ? (
           <Box>
             {stagesInProgress.map((stage, index) => {
-              const needsData = !stage.responsible_id || !stage.estimated_end_date;
-              
               return (
                 <Box 
                   key={stage.id} 
@@ -153,27 +143,16 @@ export default function ProjectCard({
                     <Typography variant="caption" color="text.secondary" fontWeight="bold">
                       EN PROCESO - ETAPA {stage.order_number}
                     </Typography>
-                    <Stack direction="row" spacing={0.5} alignItems="center">
-                      {needsData && (
-                        <Chip 
-                          icon={<WarningIcon />}
-                          label="Faltan datos"
-                          color="warning"
-                          size="small"
-                          sx={{ height: 20, fontSize: '0.7rem' }}
-                        />
-                      )}
-                      <IconButton
-                        component={RouterLink}
-                        to={`/stages/${stage.id}`}
-                        color="primary"
-                        size="small"
-                        sx={{ padding: 0.5 }}
-                        aria-label="Ver detalles de la etapa"
-                      >
-                        <OpenInNewIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
+                    <IconButton
+                      component={RouterLink}
+                      to={`/stages/${stage.id}`}
+                      color="primary"
+                      size="small"
+                      sx={{ padding: 0.5 }}
+                      aria-label="Ver detalles de la etapa"
+                    >
+                      <OpenInNewIcon fontSize="small" />
+                    </IconButton>
                   </Stack>
                   <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
                     {stage.name}

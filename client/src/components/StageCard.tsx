@@ -29,9 +29,6 @@ interface StageCardProps {
 export default function StageCard({ stage, isCurrentStage, onCompleted }: StageCardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Verificar si la etapa necesita datos - solo resaltar si está en proceso (isCurrentStage)
-  const needsData = isCurrentStage && !stage.is_completed && (!stage.responsible_id || !stage.start_date || !stage.estimated_end_date);
 
   const handleComplete = async () => {
     if (!isCurrentStage) return;
@@ -65,6 +62,21 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
     }
   };
 
+  const handleUncomplete = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      await apiClient.uncompleteStage(stage.id);
+      if (onCompleted) onCompleted();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al reabrir la etapa';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatDate = (date?: string) => {
     if (!date) return 'No definida';
     return new Date(date).toLocaleDateString('es-ES', {
@@ -82,8 +94,6 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
         borderLeftColor: isCurrentStage ? 'primary.main' : 'divider',
         bgcolor: stage.is_completed ? 'action.hover' : 'background.paper',
         opacity: stage.is_completed ? 0.8 : 1,
-        border: needsData ? '2px solid' : undefined,
-        borderColor: needsData ? 'warning.main' : undefined,
       }}
     >
       <CardContent>
@@ -114,25 +124,15 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={1}>
-            {needsData ? (
-              <Chip 
-                label="Faltan datos" 
-                color="warning" 
-                size="small"
-                sx={{ fontSize: '0.7rem' }}
-              />
-            ) : null}
-            <Box>
-              {stage.is_completed ? (
-                <Chip label="Completada" color="success" size="small" />
-              ) : isCurrentStage ? (
-                <Chip label="En Curso" color="primary" size="small" />
-              ) : (
-                <Chip label="Pendiente" color="default" size="small" />
-              )}
-            </Box>
-          </Stack>
+          <Box>
+            {stage.is_completed ? (
+              <Chip label="Completada" color="success" size="small" />
+            ) : isCurrentStage ? (
+              <Chip label="En Curso" color="primary" size="small" />
+            ) : (
+              <Chip label="Pendiente" color="default" size="small" />
+            )}
+          </Box>
         </Box>
 
         {/* Fechas */}
@@ -284,6 +284,27 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
               </>
             ) : (
               '✓ Marcar como Completada'
+            )}
+          </Button>
+        ) : null}
+
+        {/* Botón de reabrir (si está completada) */}
+        {stage.is_completed ? (
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={handleUncomplete}
+            disabled={loading}
+            fullWidth
+            sx={{ mt: 3 }}
+          >
+            {loading ? (
+              <>
+                <CircularProgress size={20} sx={{ mr: 1 }} />
+                Reabriendo...
+              </>
+            ) : (
+              '↺ Reabrir Etapa'
             )}
           </Button>
         ) : null}

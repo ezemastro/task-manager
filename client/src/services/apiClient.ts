@@ -309,6 +309,12 @@ class ApiClient {
     });
   }
 
+  async uncompleteStage(id: number): Promise<{ message: string }> {
+    return this.request(`/stages/${id}/uncomplete`, {
+      method: 'PUT',
+    });
+  }
+
   async startStage(id: number): Promise<{ message: string }> {
     return this.request(`/stages/${id}/start`, {
       method: 'PUT',
