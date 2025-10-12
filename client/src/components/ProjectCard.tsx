@@ -158,12 +158,13 @@ export default function ProjectCard({
                     {stage.name}
                   </Typography>
                   <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 0.5 }}>
+                    {stage.responsible_id && (
                     <Chip 
                       label={stage.responsible_name || 'Sin responsable'}
                       size="small"
-                      color={stage.responsible_id ? 'default' : 'warning'}
                       sx={{ height: 22, fontSize: '0.75rem' }}
                     />
+                    )}
                     {stage.estimated_end_date && (
                       <Chip 
                         label={`Hasta: ${new Date(stage.estimated_end_date).toLocaleDateString('es-ES')}`}
