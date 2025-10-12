@@ -798,11 +798,19 @@ apiRouter.post('/stages', (req: Request, res: Response) => {
         }
 
         function insertStage() {
+          // Normalizar fechas para evitar problemas de zona horaria
+          const normalizedStartDate = start_date && !start_date.includes('T') 
+            ? `${start_date}T12:00:00` 
+            : start_date;
+          const normalizedEstimatedEndDate = estimated_end_date && !estimated_end_date.includes('T')
+            ? `${estimated_end_date}T12:00:00`
+            : estimated_end_date;
+
           const sql = `
             INSERT INTO stages (project_id, name, responsible_id, start_date, estimated_end_date, order_number) 
             VALUES (?, ?, ?, ?, ?, ?)
           `;
-          db.run(sql, [project_id, name, responsible_id, start_date, estimated_end_date, order_number], function (err) {
+          db.run(sql, [project_id, name, responsible_id, normalizedStartDate, normalizedEstimatedEndDate, order_number], function (err) {
             if (err) {
               return res.status(500).json({ error: err.message });
             }
@@ -811,8 +819,8 @@ apiRouter.post('/stages', (req: Request, res: Response) => {
               project_id,
               name,
               responsible_id,
-              start_date,
-              estimated_end_date,
+              start_date: normalizedStartDate,
+              estimated_end_date: normalizedEstimatedEndDate,
               order_number,
               message: 'Etapa creada exitosamente'
             });
@@ -1095,6 +1103,15 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
   }
 
   function updateStage() {
+    // Normalizar fechas para evitar problemas de zona horaria
+    // Si la fecha es solo YYYY-MM-DD, agregarle tiempo de mediodía
+    const normalizedStartDate = start_date && !start_date.includes('T') 
+      ? `${start_date}T12:00:00` 
+      : start_date;
+    const normalizedEstimatedEndDate = estimated_end_date && !estimated_end_date.includes('T')
+      ? `${estimated_end_date}T12:00:00`
+      : estimated_end_date;
+
     const sql = `
       UPDATE stages 
       SET name = COALESCE(?, name), 
@@ -1104,7 +1121,7 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
       WHERE id = ?
     `;
 
-    db.run(sql, [name, responsible_id, start_date, estimated_end_date, id], function (err) {
+    db.run(sql, [name, responsible_id, normalizedStartDate, normalizedEstimatedEndDate, id], function (err) {
       if (err) {
         return res.status(500).json({ error: err.message });
       }

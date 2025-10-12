@@ -23,10 +23,6 @@ import {
   ListItemText,
   Paper,
   Autocomplete,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -35,9 +31,7 @@ import CommentIcon from '@mui/icons-material/Comment';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
-import SaveIcon from '@mui/icons-material/Save';
-import CancelIcon from '@mui/icons-material/Cancel';
-import { apiClient, type StageDetail, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
+import { apiClient, type StageDetail, type Tag, type CreateCommentRequest } from '../services/apiClient';
 import EditStageModal from './EditStageModal';
 
 export default function StageDetail() {
@@ -45,7 +39,6 @@ export default function StageDetail() {
   const navigate = useNavigate();
   const [stage, setStage] = useState<StageDetail | null>(null);
   const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddTagDialog, setShowAddTagDialog] = useState(false);
@@ -61,9 +54,6 @@ export default function StageDetail() {
     // Obtener el nombre del autor desde localStorage como valor inicial
     return localStorage.getItem('commentAuthor') || '';
   });
-  const [isEditing, setIsEditing] = useState(false);
-  const [editResponsibleId, setEditResponsibleId] = useState<number | null>(null);
-  const [editEstimatedEndDate, setEditEstimatedEndDate] = useState('');
 
   const fetchStageDetail = useCallback(async () => {
     if (!id) return;
@@ -85,7 +75,6 @@ export default function StageDetail() {
     if (id) {
       fetchStageDetail();
       fetchAllTags();
-      fetchUsers();
     }
   }, [id, fetchStageDetail]);
 
@@ -95,15 +84,6 @@ export default function StageDetail() {
       setAllTags(tags);
     } catch (err) {
       console.error('Error al cargar tags:', err);
-    }
-  };
-
-  const fetchUsers = async () => {
-    try {
-      const usersData = await apiClient.getUsers();
-      setUsers(usersData);
-    } catch (err) {
-      console.error('Error al cargar usuarios:', err);
     }
   };
 
@@ -208,34 +188,6 @@ export default function StageDetail() {
     }
   };
 
-  const handleStartEdit = () => {
-    setIsEditing(true);
-    setEditResponsibleId(stage?.responsible_id || null);
-    setEditEstimatedEndDate(stage?.estimated_end_date ? stage.estimated_end_date.split('T')[0] : '');
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditResponsibleId(null);
-    setEditEstimatedEndDate('');
-  };
-
-  const handleSaveEdit = async () => {
-    if (!id) return;
-    
-    try {
-      await apiClient.updateStage(Number(id), {
-        responsible_id: editResponsibleId || undefined,
-        estimated_end_date: editEstimatedEndDate || undefined,
-      });
-      setIsEditing(false);
-      await fetchStageDetail();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al actualizar etapa';
-      setError(message);
-    }
-  };
-
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 8, textAlign: 'center' }}>
@@ -333,117 +285,13 @@ export default function StageDetail() {
 
             <Divider />
 
-            {/* Sección de Responsable y Fechas - Editable */}
-            {!stage.is_completed ? (
-              <>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Asignación
-                  </Typography>
-                  {!isEditing ? (
-                    <Button
-                      size="small"
-                      startIcon={<EditIcon />}
-                      onClick={handleStartEdit}
-                    >
-                      Editar
-                    </Button>
-                  ) : (
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<SaveIcon />}
-                        onClick={handleSaveEdit}
-                      >
-                        Guardar
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<CancelIcon />}
-                        onClick={handleCancelEdit}
-                      >
-                        Cancelar
-                      </Button>
-                    </Stack>
-                  )}
-                </Stack>
-
-                {isEditing ? (
-                  <Stack spacing={2}>
-                    <FormControl fullWidth>
-                      <InputLabel>Responsable</InputLabel>
-                      <Select
-                        value={editResponsibleId || ''}
-                        onChange={(e) => setEditResponsibleId(e.target.value ? Number(e.target.value) : null)}
-                        label="Responsable"
-                      >
-                        <MenuItem value="">
-                          <em>Sin asignar</em>
-                        </MenuItem>
-                        {users.map((user) => (
-                          <MenuItem key={user.id} value={user.id}>
-                            {user.name} {user.role && `• ${user.role}`}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-
-                    <TextField
-                      fullWidth
-                      label="Fecha límite estimada"
-                      type="date"
-                      value={editEstimatedEndDate}
-                      onChange={(e) => setEditEstimatedEndDate(e.target.value)}
-                      InputLabelProps={{
-                        shrink: true,
-                      }}
-                    />
-                  </Stack>
-                ) : (
-                  <>
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Responsable
-                      </Typography>
-                      {stage.responsible_name ? (
-                        <>
-                          <Typography variant="body1">
-                            {stage.responsible_name}
-                            {stage.responsible_role && ` • ${stage.responsible_role}`}
-                          </Typography>
-                          {stage.responsible_email && (
-                            <Typography variant="caption" color="text.secondary">
-                              {stage.responsible_email}
-                            </Typography>
-                          )}
-                        </>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary" fontStyle="italic">
-                          Sin asignar
-                        </Typography>
-                      )}
-                    </Box>
-
-                    {stage.estimated_end_date && (
-                      <Box>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Fecha límite estimada
-                        </Typography>
-                        <Typography variant="body2">
-                          {new Date(stage.estimated_end_date).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                    )}
-                  </>
-                )}
-              </>
-            ) : null}
-
-            {/* Responsable solo lectura cuando está completada */}
-            {stage.is_completed ? (
-              <Box>
+            {/* Sección de Responsable y Fechas - Solo lectura */}
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Asignación
+              </Typography>
+              
+              <Box sx={{ mb: 2 }}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Responsable
                 </Typography>
@@ -465,7 +313,18 @@ export default function StageDetail() {
                   </Typography>
                 )}
               </Box>
-            ) : null}
+
+              {stage.estimated_end_date && (
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Fecha límite estimada
+                  </Typography>
+                  <Typography variant="body2">
+                    {new Date(stage.estimated_end_date).toLocaleDateString()}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
 
             {/* Fechas - mostrar si hay alguna fecha */}
             {(stage.start_date || stage.completed_date || (stage.is_completed && stage.estimated_end_date)) ? (
