@@ -24,6 +24,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { apiClient, type Project, type Stage } from '../services/apiClient';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
@@ -93,6 +95,42 @@ export default function ProjectDetail() {
   const handleStageCreated = () => {
     setShowCreateStageModal(false);
     fetchProjectDetail();
+  };
+
+  const handleMoveStage = async (stageId: number, direction: 'up' | 'down') => {
+    const currentIndex = stages.findIndex(s => s.id === stageId);
+    if (currentIndex === -1) return;
+    
+    if (direction === 'up' && currentIndex === 0) return;
+    if (direction === 'down' && currentIndex === stages.length - 1) return;
+
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const newStages = [...stages];
+    [newStages[currentIndex], newStages[newIndex]] = [newStages[newIndex], newStages[currentIndex]];
+    
+    // Actualizar el order_number de cada etapa según su nueva posición
+    const updatedStages = newStages.map((stage, index) => ({
+      ...stage,
+      order_number: index + 1
+    }));
+    
+    // Actualizar orden local inmediatamente para UX
+    setStages(updatedStages);
+
+    try {
+      // Enviar nuevo orden al backend
+      const stageOrders = updatedStages.map((stage) => ({
+        id: stage.id,
+        order_number: stage.order_number
+      }));
+      
+      await apiClient.reorderStages(stageOrders);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al reordenar etapas';
+      setError(message);
+      // Revertir en caso de error
+      fetchProjectDetail();
+    }
   };
 
   if (loading) {
@@ -221,17 +259,53 @@ export default function ProjectDetail() {
         </Alert>
       ) : (
         <Stack spacing={2}>
-          {stages.map((stage) => {
+          {stages.map((stage, index) => {
             // Una etapa está "en curso" si ha iniciado y no está completada
             const isCurrentStage = !stage.is_completed && !!stage.start_date;
             
             return (
-              <StageCard
-                key={stage.id}
-                stage={stage}
-                isCurrentStage={isCurrentStage}
-                onCompleted={fetchProjectDetail}
-              />
+              <Box key={stage.id} sx={{ position: 'relative' }}>
+                <Stack direction="row" spacing={1} alignItems="stretch">
+                  {/* Botones de reorden */}
+                  <Stack spacing={0.5}>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleMoveStage(stage.id, 'up')}
+                      disabled={index === 0}
+                      sx={{ 
+                        bgcolor: 'background.paper',
+                        border: 1,
+                        borderColor: 'divider',
+                        '&:hover': { bgcolor: 'action.hover' }
+                      }}
+                    >
+                      <ArrowUpwardIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleMoveStage(stage.id, 'down')}
+                      disabled={index === stages.length - 1}
+                      sx={{ 
+                        bgcolor: 'background.paper',
+                        border: 1,
+                        borderColor: 'divider',
+                        '&:hover': { bgcolor: 'action.hover' }
+                      }}
+                    >
+                      <ArrowDownwardIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+
+                  {/* StageCard */}
+                  <Box sx={{ flex: 1 }}>
+                    <StageCard
+                      stage={stage}
+                      isCurrentStage={isCurrentStage}
+                      onCompleted={fetchProjectDetail}
+                    />
+                  </Box>
+                </Stack>
+              </Box>
             );
           })}
         </Stack>

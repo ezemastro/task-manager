@@ -152,16 +152,24 @@ export default function StageTemplatesManagement() {
     }
 
     const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    const otherTemplate = templates[newIndex];
+    const newTemplates = [...templates];
+    [newTemplates[currentIndex], newTemplates[newIndex]] = [newTemplates[newIndex], newTemplates[currentIndex]];
+    
+    // Actualizar orden local inmediatamente para UX
+    setTemplates(newTemplates);
 
     try {
-      await Promise.all([
-        apiClient.updateStageTemplate(template.id, { order_number: otherTemplate.order_number }),
-        apiClient.updateStageTemplate(otherTemplate.id, { order_number: template.order_number }),
-      ]);
-      fetchTemplates();
+      // Enviar nuevo orden al backend
+      const templateOrders = newTemplates.map((t, index) => ({
+        id: t.id,
+        order_number: index + 1
+      }));
+      
+      await apiClient.reorderStageTemplates(templateOrders);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al reordenar');
+      // Revertir en caso de error
+      fetchTemplates();
     }
   };
 
@@ -260,14 +268,6 @@ export default function StageTemplatesManagement() {
               label="Nombre de la Etapa"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Número de Orden"
-              type="number"
-              value={formData.order_number}
-              onChange={(e) => setFormData({ ...formData, order_number: parseInt(e.target.value) })}
               fullWidth
               required
             />

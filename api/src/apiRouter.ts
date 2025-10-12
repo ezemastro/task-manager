@@ -302,6 +302,29 @@ apiRouter.post('/stage-templates', (req: Request, res: Response) => {
   );
 });
 
+// Reordenar plantillas de etapas
+// DEBE estar antes de /stage-templates/:id para evitar conflictos de ruta
+apiRouter.put('/stage-templates/reorder', (req: Request, res: Response) => {
+  const { templates } = req.body;
+
+  if (!templates || !Array.isArray(templates)) {
+    return res.status(400).json({ error: 'Se requiere un array de plantillas' });
+  }
+
+  // Actualizar el order_number de cada plantilla
+  const stmt = db.prepare('UPDATE stage_templates SET order_number = ? WHERE id = ?');
+  
+  try {
+    templates.forEach((template: { id: number; order_number: number }) => {
+      stmt.run(template.order_number, template.id);
+    });
+    stmt.finalize();
+    res.json({ message: 'Plantillas reordenadas exitosamente' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT update stage template
 apiRouter.put('/stage-templates/:id', (req: Request, res: Response) => {
   const { id } = req.params;
@@ -1079,6 +1102,28 @@ apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
     }
     res.json({ message: 'Etapa reabierta exitosamente' });
   });
+});
+
+// Reordenar etapas (DEBE estar antes de /stages/:id para evitar conflictos de ruta)
+apiRouter.put('/stages/reorder', (req: Request, res: Response) => {
+  const { stages } = req.body;
+
+  if (!stages || !Array.isArray(stages)) {
+    return res.status(400).json({ error: 'Se requiere un array de etapas' });
+  }
+
+  // Actualizar el order_number de cada etapa
+  const stmt = db.prepare('UPDATE stages SET order_number = ? WHERE id = ?');
+  
+  try {
+    stages.forEach((stage: { id: number; order_number: number }) => {
+      stmt.run(stage.order_number, stage.id);
+    });
+    stmt.finalize();
+    res.json({ message: 'Etapas reordenadas exitosamente' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Actualizar una etapa

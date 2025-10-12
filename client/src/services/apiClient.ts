@@ -327,6 +327,13 @@ class ApiClient {
     });
   }
 
+  async reorderStages(stageOrders: Array<{ id: number; order_number: number }>): Promise<{ message: string }> {
+    return this.request('/stages/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ stages: stageOrders }),
+    });
+  }
+
   async addTagToStage(stageId: number, data: AddTagToStageRequest): Promise<{ message: string }> {
     return this.request(`/stages/${stageId}/tags`, {
       method: 'POST',
@@ -494,6 +501,13 @@ class ApiClient {
   async deleteStageTemplate(id: number): Promise<{ message: string }> {
     return this.request(`/stage-templates/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async reorderStageTemplates(templateOrders: Array<{ id: number; order_number: number }>): Promise<{ message: string }> {
+    return this.request('/stage-templates/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ templates: templateOrders }),
     });
   }
 }
