@@ -157,6 +157,27 @@ export default function ProjectCard({
                   <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
                     {stage.name}
                   </Typography>
+                  
+                  {/* Etiquetas */}
+                  {stage.tags && stage.tags.length > 0 && (
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ gap: 0.5, mb: 0.5 }}>
+                      {stage.tags.map((tag) => (
+                        <Chip
+                          key={tag.id}
+                          label={tag.name}
+                          size="small"
+                          sx={{
+                            height: 20,
+                            fontSize: '0.7rem',
+                            bgcolor: tag.color || undefined,
+                            color: tag.color ? '#fff' : undefined,
+                            borderColor: tag.color || undefined,
+                          }}
+                        />
+                      ))}
+                    </Stack>
+                  )}
+                  
                   <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 0.5 }}>
                     {stage.responsible_id && (
                     <Chip 
