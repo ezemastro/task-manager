@@ -99,6 +99,18 @@ export default function StageDetail() {
     }
   };
 
+  const handleUncompleteStage = async () => {
+    if (!id) return;
+    
+    try {
+      await apiClient.uncompleteStage(Number(id));
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al reabrir etapa';
+      setError(message);
+    }
+  };
+
   const handleDeleteStage = async () => {
     if (!id) return;
     
@@ -259,7 +271,15 @@ export default function StageDetail() {
           >
             Marcar como Completada
           </Button>
-        ) : null}
+        ) : (
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={handleUncompleteStage}
+          >
+            ↺ Reabrir Etapa
+          </Button>
+        )}
       </Stack>
 
       {error && (

@@ -139,9 +139,9 @@ export interface CreateStageRequest {
 
 export interface UpdateStageRequest {
   name?: string;
-  responsible_id?: number;
-  start_date?: string;
-  estimated_end_date?: string;
+  responsible_id?: number | null;
+  start_date?: string | null;
+  estimated_end_date?: string | null;
 }
 
 export interface CreateUserRequest {

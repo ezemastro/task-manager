@@ -1104,24 +1104,43 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
 
   function updateStage() {
     // Normalizar fechas para evitar problemas de zona horaria
-    // Si la fecha es solo YYYY-MM-DD, agregarle tiempo de mediodía
-    const normalizedStartDate = start_date && !start_date.includes('T') 
+    // null significa limpiar la fecha, mantenerlo como null
+    const normalizedStartDate = start_date === null ? null : (start_date && !start_date.includes('T') 
       ? `${start_date}T12:00:00` 
-      : start_date;
-    const normalizedEstimatedEndDate = estimated_end_date && !estimated_end_date.includes('T')
+      : start_date);
+    const normalizedEstimatedEndDate = estimated_end_date === null ? null : (estimated_end_date && !estimated_end_date.includes('T')
       ? `${estimated_end_date}T12:00:00`
-      : estimated_end_date;
+      : estimated_end_date);
 
-    const sql = `
-      UPDATE stages 
-      SET name = COALESCE(?, name), 
-          responsible_id = COALESCE(?, responsible_id), 
-          start_date = COALESCE(?, start_date), 
-          estimated_end_date = COALESCE(?, estimated_end_date)
-      WHERE id = ?
-    `;
+    // Construir SQL dinámicamente para permitir actualizar campos opcionales
+    const updates: string[] = [];
+    const params: any[] = [];
 
-    db.run(sql, [name, responsible_id, normalizedStartDate, normalizedEstimatedEndDate, id], function (err) {
+    if (name !== undefined) {
+      updates.push('name = ?');
+      params.push(name);
+    }
+    if (responsible_id !== undefined) {
+      updates.push('responsible_id = ?');
+      params.push(responsible_id);
+    }
+    if (start_date !== undefined) {
+      updates.push('start_date = ?');
+      params.push(normalizedStartDate);
+    }
+    if (estimated_end_date !== undefined) {
+      updates.push('estimated_end_date = ?');
+      params.push(normalizedEstimatedEndDate);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' });
+    }
+
+    const sql = `UPDATE stages SET ${updates.join(', ')} WHERE id = ?`;
+    params.push(id);
+
+    db.run(sql, params, function (err) {
       if (err) {
         return res.status(500).json({ error: err.message });
       }

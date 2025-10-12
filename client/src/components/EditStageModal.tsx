@@ -101,9 +101,9 @@ export default function EditStageModal({
     try {
       await apiClient.updateStage(stageId, {
         name: formData.name,
-        responsible_id: formData.responsible_id || undefined,
-        start_date: formData.start_date || undefined,
-        estimated_end_date: formData.estimated_end_date || undefined,
+        responsible_id: formData.responsible_id || null,
+        start_date: formData.start_date || null,
+        estimated_end_date: formData.estimated_end_date || null,
       });
 
       if (onSuccess) {
