@@ -76,6 +76,18 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleReopenProject = async () => {
+    if (!id || !project) return;
+    
+    try {
+      await apiClient.updateProject(Number(id), { status: 'active' });
+      await fetchProjectDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al reabrir proyecto';
+      setError(message);
+    }
+  };
+
   const handleDeleteProject = async () => {
     if (!id) return;
     
@@ -186,7 +198,15 @@ export default function ProjectDetail() {
             Eliminar
           </Button>
           {project.status === 'completed' ? (
-            <Chip label="Completado" color="success" icon={<CheckCircleIcon />} />
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                onClick={handleReopenProject}
+              >
+                Reabrir Proyecto
+              </Button>
+              <Chip label="Completado" color="success" icon={<CheckCircleIcon />} />
+            </Stack>
           ) : (
             <Button
               variant="outlined"
