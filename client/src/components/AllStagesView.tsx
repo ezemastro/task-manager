@@ -22,11 +22,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  IconButton,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'status';
@@ -350,15 +348,19 @@ export default function AllStagesView() {
                 <TableCell><strong>Cliente</strong></TableCell>
                 <TableCell><strong>Fecha Inicio</strong></TableCell>
                 <TableCell><strong>Fecha Límite</strong></TableCell>
+                <TableCell><strong>Fecha Finalización</strong></TableCell>
                 <TableCell><strong>Estado</strong></TableCell>
-                <TableCell align="right"><strong>Acciones</strong></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredAndSortedStages.map((stage) => (
                 <TableRow 
                   key={stage.id}
+                  component={RouterLink}
+                  to={`/stages/${stage.id}`}
                   sx={{
+                    textDecoration: 'none',
+                    cursor: 'pointer',
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
@@ -395,6 +397,15 @@ export default function AllStagesView() {
                     </Typography>
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2" color={stage.completed_date ? 'success.main' : 'text.secondary'}>
+                      {stage.completed_date
+                        ? new Date(stage.completed_date).toLocaleDateString('es-ES')
+                        : stage.is_completed 
+                          ? 'Completada' 
+                          : '-'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
                     <Chip
                       label={
                         stage.is_completed 
@@ -412,17 +423,6 @@ export default function AllStagesView() {
                       }
                       size="small"
                     />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      component={RouterLink}
-                      to={`/stages/${stage.id}`}
-                      color="primary"
-                      size="small"
-                      aria-label="Ver detalles"
-                    >
-                      <OpenInNewIcon />
-                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
