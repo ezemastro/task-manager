@@ -106,8 +106,8 @@ export default function StageTemplatesManagement() {
       const data = {
         name: formData.name,
         order_number: formData.order_number,
-        default_responsible_id: formData.default_responsible_id ? parseInt(formData.default_responsible_id) : undefined,
-        estimated_duration_days: formData.estimated_duration_days ? parseInt(formData.estimated_duration_days) : undefined,
+        default_responsible_id: formData.default_responsible_id ? parseInt(formData.default_responsible_id) : null,
+        estimated_duration_days: formData.estimated_duration_days ? parseInt(formData.estimated_duration_days) : null,
       };
 
       if (selectedTemplate) {

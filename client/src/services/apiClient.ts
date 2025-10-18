@@ -474,8 +474,8 @@ class ApiClient {
   async createStageTemplate(data: {
     name: string;
     order_number: number;
-    default_responsible_id?: number;
-    estimated_duration_days?: number;
+    default_responsible_id?: number | null;
+    estimated_duration_days?: number | null;
   }): Promise<StageTemplate & { message: string }> {
     return this.request(`/stage-templates`, {
       method: 'POST',
@@ -488,8 +488,8 @@ class ApiClient {
     data: {
       name?: string;
       order_number?: number;
-      default_responsible_id?: number;
-      estimated_duration_days?: number;
+      default_responsible_id?: number | null;
+      estimated_duration_days?: number | null;
     }
   ): Promise<StageTemplate> {
     return this.request(`/stage-templates/${id}`, {

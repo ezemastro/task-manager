@@ -330,9 +330,42 @@ apiRouter.put('/stage-templates/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, order_number, default_responsible_id, estimated_duration_days } = req.body;
 
+  console.log('Update stage template request:', { id, name, order_number, default_responsible_id, estimated_duration_days });
+
+  // Construir la consulta dinámicamente para permitir null
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (name !== undefined) {
+    updates.push('name = ?');
+    values.push(name);
+  }
+  if (order_number !== undefined) {
+    updates.push('order_number = ?');
+    values.push(order_number);
+  }
+  if (default_responsible_id !== undefined) {
+    updates.push('default_responsible_id = ?');
+    values.push(default_responsible_id);
+  }
+  if (estimated_duration_days !== undefined) {
+    updates.push('estimated_duration_days = ?');
+    values.push(estimated_duration_days);
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: 'No hay campos para actualizar' });
+    return;
+  }
+
+  values.push(id);
+
+  console.log('SQL Query:', `UPDATE stage_templates SET ${updates.join(', ')} WHERE id = ?`);
+  console.log('Values:', values);
+
   db.run(
-    'UPDATE stage_templates SET name = COALESCE(?, name), order_number = COALESCE(?, order_number), default_responsible_id = COALESCE(?, default_responsible_id), estimated_duration_days = COALESCE(?, estimated_duration_days) WHERE id = ?',
-    [name, order_number, default_responsible_id, estimated_duration_days, id],
+    `UPDATE stage_templates SET ${updates.join(', ')} WHERE id = ?`,
+    values,
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -349,6 +382,7 @@ apiRouter.put('/stage-templates/:id', (req: Request, res: Response) => {
           res.status(500).json({ error: err.message });
           return;
         }
+        console.log('Updated template:', row);
         res.json(row);
       });
     }
