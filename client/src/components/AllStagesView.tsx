@@ -42,7 +42,7 @@ export default function AllStagesView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedClient, setSelectedClient] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('all'); // all, active, completed
+  const [statusFilter, setStatusFilter] = useState<string>('active'); // all, active, completed
   const [sortBy, setSortBy] = useState<SortOption>('project');
   const [showFilters, setShowFilters] = useState(false);
 
