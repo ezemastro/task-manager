@@ -12,9 +12,9 @@ import {
   Divider,
   Avatar,
 } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
 import { apiClient, type User, type Stage } from '../services/apiClient';
+import StageInProgressCard from './StageInProgressCard';
 
 interface UserWithStages extends User {
   inProgressStages: Stage[];
@@ -141,40 +141,12 @@ export default function UserDashboard() {
 
                     <Stack spacing={1.5} sx={{ mt: 2 }}>
                       {user.inProgressStages.map((stage) => (
-                        <Card
+                        <StageInProgressCard
                           key={stage.id}
-                          variant="outlined"
-                          component={RouterLink}
-                          to={`/stages/${stage.id}`}
-                          sx={{
-                            textDecoration: 'none',
-                            transition: 'all 0.2s',
-                            bgcolor: 'action.hover',
-                            '&:hover': {
-                              boxShadow: 2,
-                              transform: 'translateY(-2px)',
-                            },
-                          }}
-                        >
-                          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center">
-                              <Box>
-                                <Typography variant="subtitle2" component="div">
-                                  {stage.name}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {stage.project_name && `Proyecto: ${stage.project_name}`}
-                                  {stage.order_number && ` • Etapa ${stage.order_number}`}
-                                </Typography>
-                              </Box>
-                              <Chip
-                                size="small"
-                                label="En Proceso"
-                                color="primary"
-                              />
-                            </Stack>
-                          </CardContent>
-                        </Card>
+                          stage={stage}
+                          showProjectName={true}
+                          showStageNumber={true}
+                        />
                       ))}
                     </Stack>
                   </>
@@ -189,39 +161,13 @@ export default function UserDashboard() {
 
                     <Stack spacing={1.5} sx={{ mt: 2 }}>
                       {user.pendingStages.map((stage) => (
-                        <Card
+                        <StageInProgressCard
                           key={stage.id}
-                          variant="outlined"
-                          component={RouterLink}
-                          to={`/stages/${stage.id}`}
-                          sx={{
-                            textDecoration: 'none',
-                            transition: 'all 0.2s',
-                            '&:hover': {
-                              boxShadow: 2,
-                              transform: 'translateY(-2px)',
-                            },
-                          }}
-                        >
-                          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center">
-                              <Box>
-                                <Typography variant="subtitle2" component="div">
-                                  {stage.name}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {stage.project_name && `Proyecto: ${stage.project_name}`}
-                                  {stage.order_number && ` • Etapa ${stage.order_number}`}
-                                </Typography>
-                              </Box>
-                              <Chip
-                                size="small"
-                                label="Pendiente"
-                                color="default"
-                              />
-                            </Stack>
-                          </CardContent>
-                        </Card>
+                          stage={stage}
+                          showProjectName={true}
+                          showStageNumber={true}
+                          variant="pending"
+                        />
                       ))}
                     </Stack>
                   </>
