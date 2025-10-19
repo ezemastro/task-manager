@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { Stage } from '../services/apiClient';
+import DeadlineChip from './DeadlineChip';
 
 interface StageInProgressCardProps {
   stage: Stage;
@@ -89,10 +90,12 @@ export default function StageInProgressCard({
           />
         )}
         {stage.estimated_end_date && (
-          <Chip 
-            label={`Hasta: ${new Date(stage.estimated_end_date).toLocaleDateString('es-ES')}`}
+          <DeadlineChip
+            date={stage.estimated_end_date}
+            isCompleted={stage.is_completed}
             size="small"
-            sx={{ height: 22, fontSize: '0.75rem' }}
+            showIcon={true}
+            label={`Hasta: ${new Date(stage.estimated_end_date).toLocaleDateString('es-ES')}`}
           />
         )}
       </Stack>

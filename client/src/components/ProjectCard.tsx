@@ -10,9 +10,9 @@ import {
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BusinessIcon from '@mui/icons-material/Business';
-import EventIcon from '@mui/icons-material/Event';
 import type { Stage } from '../services/apiClient';
 import StageInProgressCard from './StageInProgressCard';
+import DeadlineChip from './DeadlineChip';
 
 interface ProjectCardProps {
   projectId: number;
@@ -35,12 +35,10 @@ export default function ProjectCard({
   const completedStages = stages.filter(stage => stage.is_completed).length;
   const totalStages = stages.length;
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
+  const isCompleted = totalStages > 0 && completedStages === totalStages;
   
   // Obtener TODAS las etapas en proceso (con start_date y no completadas)
   const stagesInProgress = stages.filter(stage => stage.start_date && !stage.is_completed);
-  
-  // Calcular si está atrasado
-  const isOverdue = deadline && new Date(deadline) < new Date();
 
   return (
     <Card 
@@ -87,12 +85,12 @@ export default function ProjectCard({
                 </Box>
               )}
               {deadline && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <EventIcon fontSize="small" color={isOverdue ? 'error' : 'action'} />
-                  <Typography variant="caption" color={isOverdue ? 'error' : 'text.secondary'}>
-                    {new Date(deadline).toLocaleDateString('es-ES')}
-                  </Typography>
-                </Box>
+                <DeadlineChip 
+                  date={deadline} 
+                  isCompleted={isCompleted}
+                  size="small"
+                  showIcon={true}
+                />
               )}
             </Stack>
           </Box>

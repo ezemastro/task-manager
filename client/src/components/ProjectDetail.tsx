@@ -30,6 +30,7 @@ import { apiClient, type Project, type Stage } from '../services/apiClient';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
+import DeadlineChip from './DeadlineChip';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -248,7 +249,7 @@ export default function ProjectDetail() {
               <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: 1 }} />
             </Box>
 
-            <Stack direction="row" spacing={2}>
+            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
               <Typography variant="caption" color="text.secondary">
                 Creado: {new Date(project.created_at).toLocaleDateString()}
               </Typography>
@@ -256,6 +257,19 @@ export default function ProjectDetail() {
                 <Typography variant="caption" color="text.secondary">
                   Actualizado: {new Date(project.updated_at).toLocaleDateString()}
                 </Typography>
+              )}
+              {project.deadline && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Fecha límite:
+                  </Typography>
+                  <DeadlineChip
+                    date={project.deadline}
+                    isCompleted={project.status === 'completed'}
+                    size="small"
+                    showIcon={true}
+                  />
+                </Box>
               )}
             </Stack>
           </Stack>

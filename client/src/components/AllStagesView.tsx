@@ -26,6 +26,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
+import DeadlineChip from './DeadlineChip';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'status';
 
@@ -390,11 +391,18 @@ export default function AllStagesView() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" color={stage.estimated_end_date ? 'inherit' : 'text.secondary'}>
-                      {stage.estimated_end_date
-                        ? new Date(stage.estimated_end_date).toLocaleDateString('es-ES')
-                        : 'Sin fecha'}
-                    </Typography>
+                    {stage.estimated_end_date ? (
+                      <DeadlineChip
+                        date={stage.estimated_end_date}
+                        isCompleted={stage.is_completed}
+                        size="small"
+                        showIcon={false}
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Sin fecha
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" color={stage.completed_date ? 'success.main' : 'text.secondary'}>
