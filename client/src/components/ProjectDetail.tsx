@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -43,9 +43,18 @@ export default function ProjectDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  
+  // Ref para mantener la posición del scroll
+  const scrollPositionRef = useRef<number>(0);
+  const shouldRestoreScrollRef = useRef<boolean>(false);
 
   const fetchProjectDetail = useCallback(async () => {
     if (!id) return;
+    
+    // Guardar posición de scroll si se debe restaurar
+    if (shouldRestoreScrollRef.current) {
+      scrollPositionRef.current = window.scrollY;
+    }
     
     setLoading(true);
     setError('');
@@ -64,6 +73,14 @@ export default function ProjectDetail() {
   useEffect(() => {
     fetchProjectDetail();
   }, [fetchProjectDetail]);
+  
+  // Restaurar scroll después de actualizar los datos
+  useEffect(() => {
+    if (!loading && shouldRestoreScrollRef.current) {
+      window.scrollTo(0, scrollPositionRef.current);
+      shouldRestoreScrollRef.current = false;
+    }
+  }, [loading]);
 
   const handleCompleteProject = async () => {
     if (!id || !project) return;
@@ -107,6 +124,12 @@ export default function ProjectDetail() {
 
   const handleStageCreated = () => {
     setShowCreateStageModal(false);
+    shouldRestoreScrollRef.current = true;
+    fetchProjectDetail();
+  };
+
+  const handleStageUpdated = () => {
+    shouldRestoreScrollRef.current = true;
     fetchProjectDetail();
   };
 
@@ -335,7 +358,7 @@ export default function ProjectDetail() {
                     <StageCard
                       stage={stage}
                       isCurrentStage={isCurrentStage}
-                      onCompleted={fetchProjectDetail}
+                      onCompleted={handleStageUpdated}
                     />
                   </Box>
                 </Stack>
