@@ -1475,6 +1475,31 @@ apiRouter.delete('/comments/:id', (req: Request, res: Response) => {
   });
 });
 
+// Actualizar un comentario
+apiRouter.put('/comments/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { content } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'El contenido del comentario es requerido' });
+  }
+
+  const sql = 'UPDATE comments SET content = ? WHERE id = ?';
+  db.run(sql, [content, id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Comentario no encontrado' });
+    }
+    res.json({ 
+      id: Number(id),
+      content,
+      message: 'Comentario actualizado exitosamente' 
+    });
+  });
+});
+
 // Manejo de cierre gracioso
 process.on('SIGINT', () => {
   db.close((err) => {

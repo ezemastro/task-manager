@@ -426,6 +426,13 @@ class ApiClient {
     });
   }
 
+  async updateComment(id: number, data: { content: string }): Promise<{ id: number; content: string; message: string }> {
+    return this.request(`/comments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteComment(id: number): Promise<{ message: string }> {
     return this.request(`/comments/${id}`, {
       method: 'DELETE',

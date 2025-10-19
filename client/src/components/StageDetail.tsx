@@ -60,6 +60,10 @@ export default function StageDetail() {
     return localStorage.getItem('commentAuthor') || '';
   });
 
+  // Estados para edición de comentarios
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editCommentContent, setEditCommentContent] = useState('');
+
   // Estados para edición inline
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState('');
@@ -225,6 +229,30 @@ export default function StageDetail() {
       const message = err instanceof Error ? err.message : 'Error al eliminar comentario';
       setError(message);
     }
+  };
+
+  const startEditingComment = (commentId: number, currentContent: string) => {
+    setEditingCommentId(commentId);
+    setEditCommentContent(currentContent);
+  };
+
+  const handleUpdateComment = async (commentId: number) => {
+    if (!editCommentContent.trim()) return;
+    
+    try {
+      await apiClient.updateComment(commentId, { content: editCommentContent });
+      setEditingCommentId(null);
+      setEditCommentContent('');
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar comentario';
+      setError(message);
+    }
+  };
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditCommentContent('');
   };
 
   // Funciones de edición inline
@@ -728,13 +756,46 @@ export default function StageDetail() {
                   <ListItem
                     alignItems="flex-start"
                     secondaryAction={
-                      <IconButton
-                        edge="end"
-                        aria-label="delete"
-                        onClick={() => handleDeleteComment(comment.id)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      editingCommentId === comment.id ? (
+                        <Stack direction="row" spacing={1}>
+                          <IconButton
+                            edge="end"
+                            aria-label="save"
+                            onClick={() => handleUpdateComment(comment.id)}
+                            color="primary"
+                            size="small"
+                          >
+                            <SaveIcon />
+                          </IconButton>
+                          <IconButton
+                            edge="end"
+                            aria-label="cancel"
+                            onClick={cancelEditComment}
+                            size="small"
+                          >
+                            <CloseIcon />
+                          </IconButton>
+                        </Stack>
+                      ) : (
+                        <Stack direction="row" spacing={1}>
+                          <IconButton
+                            edge="end"
+                            aria-label="edit"
+                            onClick={() => startEditingComment(comment.id, comment.content)}
+                            size="small"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            edge="end"
+                            aria-label="delete"
+                            onClick={() => handleDeleteComment(comment.id)}
+                            size="small"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Stack>
+                      )
                     }
                   >
                     <ListItemText
@@ -747,9 +808,22 @@ export default function StageDetail() {
                         </Stack>
                       }
                       secondary={
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          {comment.content}
-                        </Typography>
+                        editingCommentId === comment.id ? (
+                          <TextField
+                            fullWidth
+                            multiline
+                            rows={3}
+                            value={editCommentContent}
+                            onChange={(e) => setEditCommentContent(e.target.value)}
+                            size="small"
+                            sx={{ mt: 1 }}
+                            autoFocus
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ mt: 1 }}>
+                            {comment.content}
+                          </Typography>
+                        )
                       }
                     />
                   </ListItem>
