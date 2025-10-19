@@ -23,6 +23,10 @@ import {
   ListItemText,
   Paper,
   Autocomplete,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -31,19 +35,20 @@ import CommentIcon from '@mui/icons-material/Comment';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
-import { apiClient, type StageDetail, type Tag, type CreateCommentRequest } from '../services/apiClient';
-import EditStageModal from './EditStageModal';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import { apiClient, type StageDetail, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [stage, setStage] = useState<StageDetail | null>(null);
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddTagDialog, setShowAddTagDialog] = useState(false);
   const [showCreateTagDialog, setShowCreateTagDialog] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
@@ -54,6 +59,18 @@ export default function StageDetail() {
     // Obtener el nombre del autor desde localStorage como valor inicial
     return localStorage.getItem('commentAuthor') || '';
   });
+
+  // Estados para edición inline
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editingResponsible, setEditingResponsible] = useState(false);
+  const [editResponsible, setEditResponsible] = useState<number | null>(null);
+  const [editingStartDate, setEditingStartDate] = useState(false);
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editingEstimatedDate, setEditingEstimatedDate] = useState(false);
+  const [editEstimatedDate, setEditEstimatedDate] = useState('');
+  const [editingCompletedDate, setEditingCompletedDate] = useState(false);
+  const [editCompletedDate, setEditCompletedDate] = useState('');
 
   const fetchStageDetail = useCallback(async () => {
     if (!id) return;
@@ -75,8 +92,18 @@ export default function StageDetail() {
     if (id) {
       fetchStageDetail();
       fetchAllTags();
+      fetchUsers();
     }
   }, [id, fetchStageDetail]);
+
+  const fetchUsers = async () => {
+    try {
+      const usersData = await apiClient.getUsers();
+      setUsers(usersData);
+    } catch (err) {
+      console.error('Error al cargar usuarios:', err);
+    }
+  };
 
   const fetchAllTags = async () => {
     try {
@@ -200,6 +227,100 @@ export default function StageDetail() {
     }
   };
 
+  // Funciones de edición inline
+  const handleSaveName = async () => {
+    if (!id || !editName.trim()) return;
+    try {
+      await apiClient.updateStage(Number(id), { name: editName });
+      setEditingName(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar nombre';
+      setError(message);
+    }
+  };
+
+  const handleSaveResponsible = async () => {
+    if (!id) return;
+    try {
+      await apiClient.updateStage(Number(id), { 
+        responsible_id: editResponsible || null 
+      });
+      setEditingResponsible(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar responsable';
+      setError(message);
+    }
+  };
+
+  const handleSaveStartDate = async () => {
+    if (!id) return;
+    try {
+      await apiClient.updateStage(Number(id), { 
+        start_date: editStartDate || null 
+      });
+      setEditingStartDate(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar fecha de inicio';
+      setError(message);
+    }
+  };
+
+  const handleSaveEstimatedDate = async () => {
+    if (!id) return;
+    try {
+      await apiClient.updateStage(Number(id), { 
+        estimated_end_date: editEstimatedDate || null 
+      });
+      setEditingEstimatedDate(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar fecha estimada';
+      setError(message);
+    }
+  };
+
+  const handleSaveCompletedDate = async () => {
+    if (!id) return;
+    try {
+      await apiClient.updateStage(Number(id), { 
+        completed_date: editCompletedDate || null 
+      });
+      setEditingCompletedDate(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar fecha de finalización';
+      setError(message);
+    }
+  };
+
+  const startEditingName = () => {
+    setEditName(stage?.name || '');
+    setEditingName(true);
+  };
+
+  const startEditingResponsible = () => {
+    setEditResponsible(stage?.responsible_id || null);
+    setEditingResponsible(true);
+  };
+
+  const startEditingStartDate = () => {
+    setEditStartDate(stage?.start_date ? stage.start_date.split('T')[0] : '');
+    setEditingStartDate(true);
+  };
+
+  const startEditingEstimatedDate = () => {
+    setEditEstimatedDate(stage?.estimated_end_date ? stage.estimated_end_date.split('T')[0] : '');
+    setEditingEstimatedDate(true);
+  };
+
+  const startEditingCompletedDate = () => {
+    setEditCompletedDate(stage?.completed_date ? stage.completed_date.split('T')[0] : '');
+    setEditingCompletedDate(true);
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 8, textAlign: 'center' }}>
@@ -233,9 +354,32 @@ export default function StageDetail() {
           <ArrowBackIcon />
         </IconButton>
         <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h4" component="h1">
-            {stage.name}
-          </Typography>
+          {editingName ? (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                size="small"
+                autoFocus
+                fullWidth
+              />
+              <IconButton color="primary" onClick={handleSaveName} size="small">
+                <SaveIcon />
+              </IconButton>
+              <IconButton onClick={() => setEditingName(false)} size="small">
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="h4" component="h1">
+                {stage.name}
+              </Typography>
+              <IconButton size="small" onClick={startEditingName}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          )}
           {stage.project_name && (
             <Typography variant="body2" color="text.secondary">
               Proyecto: {stage.project_name}
@@ -247,13 +391,6 @@ export default function StageDetail() {
           color="default"
           variant="outlined"
         />
-        <Button
-          variant="outlined"
-          startIcon={<EditIcon />}
-          onClick={() => setShowEditModal(true)}
-        >
-          Editar
-        </Button>
         <Button
           variant="outlined"
           color="error"
@@ -305,17 +442,47 @@ export default function StageDetail() {
 
             <Divider />
 
-            {/* Sección de Responsable y Fechas - Solo lectura */}
+            {/* Sección de Responsable y Fechas - Editable inline */}
             <Box>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Asignación
-              </Typography>
-              
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Responsable
-                </Typography>
-                {stage.responsible_name ? (
+              {/* Responsable */}
+              <Box sx={{ mb: 3 }}>
+                <Stack direction="row" justifyContent="start" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Responsable
+                  </Typography>
+                  {!editingResponsible && (
+                    <IconButton size="small" onClick={startEditingResponsible}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Stack>
+                {editingResponsible ? (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <FormControl size="small" fullWidth>
+                      <InputLabel>Responsable</InputLabel>
+                      <Select
+                        value={editResponsible || ''}
+                        onChange={(e) => setEditResponsible(e.target.value ? Number(e.target.value) : null)}
+                        label="Responsable"
+                      >
+                        <MenuItem value="">
+                          <em>Sin asignar</em>
+                        </MenuItem>
+                        {users.map((user) => (
+                          <MenuItem key={user.id} value={user.id}>
+                            {user.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <IconButton color="primary" onClick={handleSaveResponsible} size="small">
+                      <SaveIcon />
+                    </IconButton>
+                    <IconButton onClick={() => setEditingResponsible(false)} size="small">
+                      <CloseIcon />
+                    </IconButton>
+                  </Stack>
+                ) : stage.responsible_name ? (
                   <>
                     <Typography variant="body1">
                       {stage.responsible_name}
@@ -334,56 +501,133 @@ export default function StageDetail() {
                 )}
               </Box>
 
-              {stage.estimated_end_date && (
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Fecha límite estimada
-                  </Typography>
-                  <Typography variant="body2">
-                    {new Date(stage.estimated_end_date).toLocaleDateString()}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
+              <Divider sx={{ mb: 3 }} />
 
-            {/* Fechas - mostrar si hay alguna fecha */}
-            {(stage.start_date || stage.completed_date || (stage.is_completed && stage.estimated_end_date)) ? (
-              <>
-                <Divider />
-                <Stack direction="row" spacing={4} flexWrap="wrap">
-                  {stage.start_date && (
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Fecha de inicio
-                      </Typography>
-                      <Typography variant="body2">
-                        {new Date(stage.start_date).toLocaleDateString()}
-                      </Typography>
-                    </Box>
+              {/* Fechas en fila */}
+              <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+                {/* Fecha de inicio */}
+                <Box sx={{ flex: 1, minWidth: 200 }}>
+                  <Stack direction="row" justifyContent="start" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Fecha de inicio
+                    </Typography>
+                    {!editingStartDate && (
+                      <IconButton size="small" onClick={startEditingStartDate}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Stack>
+                  {editingStartDate ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <TextField
+                        type="date"
+                        value={editStartDate}
+                        onChange={(e) => setEditStartDate(e.target.value)}
+                        size="small"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                      />
+                      <IconButton color="primary" onClick={handleSaveStartDate} size="small">
+                        <SaveIcon />
+                      </IconButton>
+                      <IconButton onClick={() => setEditingStartDate(false)} size="small">
+                        <CloseIcon />
+                      </IconButton>
+                    </Stack>
+                  ) : stage.start_date ? (
+                    <Typography variant="body2">
+                      {new Date(stage.start_date).toLocaleDateString()}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                      Sin fecha
+                    </Typography>
                   )}
-                  {stage.completed_date && (
-                    <Box>
+                </Box>
+
+                {/* Fecha límite estimada */}
+                <Box sx={{ flex: 1, minWidth: 200 }}>
+                  <Stack direction="row" justifyContent="start" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Fecha límite estimada
+                    </Typography>
+                    {!editingEstimatedDate && (
+                      <IconButton size="small" onClick={startEditingEstimatedDate}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Stack>
+                  {editingEstimatedDate ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <TextField
+                        type="date"
+                        value={editEstimatedDate}
+                        onChange={(e) => setEditEstimatedDate(e.target.value)}
+                        size="small"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                      />
+                      <IconButton color="primary" onClick={handleSaveEstimatedDate} size="small">
+                        <SaveIcon />
+                      </IconButton>
+                      <IconButton onClick={() => setEditingEstimatedDate(false)} size="small">
+                        <CloseIcon />
+                      </IconButton>
+                    </Stack>
+                  ) : stage.estimated_end_date ? (
+                    <Typography variant="body2">
+                      {new Date(stage.estimated_end_date).toLocaleDateString()}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                      Sin fecha
+                    </Typography>
+                  )}
+                </Box>
+
+                {/* Fecha de finalización (solo si está completada) */}
+                {stage.is_completed ? (
+                  <Box sx={{ flex: 1, minWidth: 200 }}>
+                    <Stack direction="row" justifyContent="start" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
                       <Typography variant="subtitle2" color="text.secondary">
                         Fecha de finalización
                       </Typography>
+                      {!editingCompletedDate && (
+                        <IconButton size="small" onClick={startEditingCompletedDate}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Stack>
+                    {editingCompletedDate ? (
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <TextField
+                          type="date"
+                          value={editCompletedDate}
+                          onChange={(e) => setEditCompletedDate(e.target.value)}
+                          size="small"
+                          fullWidth
+                          InputLabelProps={{ shrink: true }}
+                        />
+                        <IconButton color="primary" onClick={handleSaveCompletedDate} size="small">
+                          <SaveIcon />
+                        </IconButton>
+                        <IconButton onClick={() => setEditingCompletedDate(false)} size="small">
+                          <CloseIcon />
+                        </IconButton>
+                      </Stack>
+                    ) : stage.completed_date ? (
                       <Typography variant="body2">
                         {new Date(stage.completed_date).toLocaleDateString()}
                       </Typography>
-                    </Box>
-                  )}
-                  {stage.is_completed && stage.estimated_end_date ? (
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Fecha límite estimada
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                        Sin fecha
                       </Typography>
-                      <Typography variant="body2">
-                        {new Date(stage.estimated_end_date).toLocaleDateString()}
-                      </Typography>
-                    </Box>
-                  ) : null}
-                </Stack>
-              </>
-            ) : null}
+                    )}
+                  </Box>
+                ): null}
+              </Stack>
+            </Box>
           </Stack>
         </CardContent>
       </Card>
@@ -596,22 +840,6 @@ export default function StageDetail() {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Modal de edición */}
-      {stage && (
-        <EditStageModal
-          open={showEditModal}
-          onClose={() => setShowEditModal(false)}
-          onSuccess={fetchStageDetail}
-          stageId={stage.id}
-          initialData={{
-            name: stage.name,
-            responsible_id: stage.responsible_id,
-            start_date: stage.start_date,
-            estimated_end_date: stage.estimated_end_date,
-          }}
-        />
-      )}
 
       {/* Diálogo de confirmación de eliminación */}
       <Dialog

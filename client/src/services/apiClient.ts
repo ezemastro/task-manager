@@ -142,6 +142,7 @@ export interface UpdateStageRequest {
   responsible_id?: number | null;
   start_date?: string | null;
   estimated_end_date?: string | null;
+  completed_date?: string | null;
 }
 
 export interface CreateUserRequest {

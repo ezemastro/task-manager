@@ -1163,7 +1163,7 @@ apiRouter.put('/stages/reorder', (req: Request, res: Response) => {
 // Actualizar una etapa
 apiRouter.put('/stages/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, responsible_id, start_date, estimated_end_date } = req.body;
+  const { name, responsible_id, start_date, estimated_end_date, completed_date } = req.body;
 
   // Si se proporciona responsible_id, verificar que el usuario existe
   if (responsible_id) {
@@ -1190,6 +1190,9 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
     const normalizedEstimatedEndDate = estimated_end_date === null ? null : (estimated_end_date && !estimated_end_date.includes('T')
       ? `${estimated_end_date}T12:00:00`
       : estimated_end_date);
+    const normalizedCompletedDate = completed_date === null ? null : (completed_date && !completed_date.includes('T')
+      ? `${completed_date}T12:00:00`
+      : completed_date);
 
     // Construir SQL dinámicamente para permitir actualizar campos opcionales
     const updates: string[] = [];
@@ -1210,6 +1213,10 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
     if (estimated_end_date !== undefined) {
       updates.push('estimated_end_date = ?');
       params.push(normalizedEstimatedEndDate);
+    }
+    if (completed_date !== undefined) {
+      updates.push('completed_date = ?');
+      params.push(normalizedCompletedDate);
     }
 
     if (updates.length === 0) {
