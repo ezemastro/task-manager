@@ -118,6 +118,20 @@ export default function EditProjectModal({
 
   const handleClose = () => {
     if (!loading) {
+      // Verificar si hay cambios sin guardar comparando con initialData
+      const hasChanges = 
+        formData.name !== initialData.name ||
+        formData.description !== (initialData.description || '') ||
+        formData.client_id !== initialData.client_id ||
+        formData.deadline !== (initialData.deadline ? initialData.deadline.split('T')[0] : '');
+      
+      if (hasChanges) {
+        const confirm = window.confirm(
+          '¿Estás seguro de que quieres cerrar? Los cambios sin guardar se perderán.'
+        );
+        if (!confirm) return;
+      }
+      
       setErrors({});
       setErrorMessage('');
       onClose();

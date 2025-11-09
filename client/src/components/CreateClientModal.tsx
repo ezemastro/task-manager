@@ -56,6 +56,16 @@ export default function CreateClientModal({ open, onClose, onClientCreated }: Cr
 
   const handleClose = () => {
     if (!loading) {
+      // Verificar si hay cambios sin guardar
+      const hasChanges = name.trim() !== '' || email.trim() !== '' || phone.trim() !== '';
+      
+      if (hasChanges) {
+        const confirm = window.confirm(
+          '¿Estás seguro de que quieres cerrar? Los cambios se perderán.'
+        );
+        if (!confirm) return;
+      }
+      
       setName('');
       setEmail('');
       setPhone('');

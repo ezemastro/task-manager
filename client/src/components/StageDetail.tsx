@@ -83,6 +83,30 @@ export default function StageDetail() {
   const [editingIntermediateDateNote, setEditingIntermediateDateNote] = useState(false);
   const [editIntermediateDateNote, setEditIntermediateDateNote] = useState('');
 
+  // Verificar si hay cambios sin guardar
+  const hasUnsavedChanges = 
+    editingName || 
+    editingResponsible || 
+    editingStartDate || 
+    editingEstimatedDate || 
+    editingCompletedDate ||
+    editingIntermediateDate ||
+    editingIntermediateDateNote ||
+    editingCommentId !== null;
+
+  // Prevenir salir de la página si hay cambios sin guardar
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   const fetchStageDetail = useCallback(async () => {
     if (!id) return;
     
@@ -394,6 +418,16 @@ export default function StageDetail() {
     setEditingIntermediateDateNote(true);
   };
 
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      const confirm = window.confirm(
+        '¿Estás seguro de que quieres salir? Tienes cambios sin guardar que se perderán.'
+      );
+      if (!confirm) return;
+    }
+    navigate(-1);
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 8, textAlign: 'center' }}>
@@ -423,7 +457,7 @@ export default function StageDetail() {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-        <IconButton onClick={() => navigate(-1)} aria-label="Volver">
+        <IconButton onClick={handleBack} aria-label="Volver">
           <ArrowBackIcon />
         </IconButton>
         <Box sx={{ flexGrow: 1 }}>

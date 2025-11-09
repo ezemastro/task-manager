@@ -126,6 +126,19 @@ export default function CreateProjectModal({
 
   const handleClose = () => {
     if (!loading) {
+      // Verificar si hay cambios sin guardar
+      const hasChanges = formData.name.trim() !== '' || 
+                         formData.description?.trim() !== '' || 
+                         formData.client_id !== undefined || 
+                         formData.deadline !== undefined;
+      
+      if (hasChanges) {
+        const confirm = window.confirm(
+          '¿Estás seguro de que quieres cerrar? Los cambios se perderán.'
+        );
+        if (!confirm) return;
+      }
+      
       setFormData({ name: '', description: '', client_id: undefined, deadline: undefined });
       setErrors({});
       setErrorMessage('');

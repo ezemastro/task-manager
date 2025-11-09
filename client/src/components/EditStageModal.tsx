@@ -120,6 +120,20 @@ export default function EditStageModal({
 
   const handleClose = () => {
     if (!loading) {
+      // Verificar si hay cambios sin guardar comparando con initialData
+      const hasChanges = 
+        formData.name !== initialData.name ||
+        formData.responsible_id !== initialData.responsible_id ||
+        formData.start_date !== (initialData.start_date ? initialData.start_date.substring(0, 10) : '') ||
+        formData.estimated_end_date !== (initialData.estimated_end_date ? initialData.estimated_end_date.substring(0, 10) : '');
+      
+      if (hasChanges) {
+        const confirm = window.confirm(
+          '¿Estás seguro de que quieres cerrar? Los cambios sin guardar se perderán.'
+        );
+        if (!confirm) return;
+      }
+      
       setErrors({});
       setErrorMessage('');
       onClose();

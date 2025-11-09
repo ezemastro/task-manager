@@ -156,6 +156,19 @@ export default function CreateStageModal({
 
   const handleClose = () => {
     if (!loading) {
+      // Verificar si hay cambios sin guardar
+      const hasChanges = formData.name.trim() !== '' || 
+                         formData.responsible_id !== 0 || 
+                         formData.start_date !== '' || 
+                         formData.estimated_end_date !== '';
+      
+      if (hasChanges) {
+        const confirm = window.confirm(
+          '¿Estás seguro de que quieres cerrar? Los cambios se perderán.'
+        );
+        if (!confirm) return;
+      }
+      
       setFormData({
         name: '',
         responsible_id: 0,
