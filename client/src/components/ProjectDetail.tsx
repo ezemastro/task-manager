@@ -43,6 +43,9 @@ export default function ProjectDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
+  const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
+  const [deletingStage, setDeletingStage] = useState(false);
   
   // Ref para mantener la posición del scroll
   const scrollPositionRef = useRef<number>(0);
@@ -131,6 +134,29 @@ export default function ProjectDetail() {
   const handleStageUpdated = () => {
     shouldRestoreScrollRef.current = true;
     fetchProjectDetail();
+  };
+
+  const handleDeleteStageClick = (stage: Stage) => {
+    setStageToDelete(stage);
+    setShowDeleteStageDialog(true);
+  };
+
+  const handleDeleteStage = async () => {
+    if (!stageToDelete) return;
+    
+    setDeletingStage(true);
+    try {
+      await apiClient.deleteStage(stageToDelete.id);
+      setShowDeleteStageDialog(false);
+      setStageToDelete(null);
+      shouldRestoreScrollRef.current = true;
+      await fetchProjectDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar etapa';
+      setError(message);
+    } finally {
+      setDeletingStage(false);
+    }
   };
 
   const handleMoveStage = async (stageId: number, direction: 'up' | 'down') => {
@@ -302,7 +328,6 @@ export default function ProjectDetail() {
         <Button
           variant="contained"
           onClick={() => setShowCreateStageModal(true)}
-          disabled={project.status === 'completed'}
         >
           + Nueva Etapa
         </Button>
@@ -321,7 +346,7 @@ export default function ProjectDetail() {
             return (
               <Box key={stage.id} sx={{ position: 'relative' }}>
                 <Stack direction="row" spacing={1} alignItems="stretch">
-                  {/* Botones de reorden */}
+                  {/* Botones de reorden y eliminar */}
                   <Stack spacing={0.5}>
                     <IconButton
                       size="small"
@@ -335,6 +360,22 @@ export default function ProjectDetail() {
                       }}
                     >
                       <ArrowUpwardIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDeleteStageClick(stage)}
+                      sx={{ 
+                        bgcolor: 'background.paper',
+                        border: 1,
+                        borderColor: 'divider',
+                        color: 'error.main',
+                        '&:hover': { 
+                          bgcolor: 'error.light',
+                          borderColor: 'error.main'
+                        }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
                     <IconButton
                       size="small"
@@ -403,6 +444,27 @@ export default function ProjectDetail() {
           </Button>
           <Button onClick={handleDeleteProject} color="error" variant="contained" disabled={deleting}>
             {deleting ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={showDeleteStageDialog}
+        onClose={() => !deletingStage && setShowDeleteStageDialog(false)}
+      >
+        <DialogTitle>¿Eliminar etapa?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Esta acción eliminará permanentemente la etapa "{stageToDelete?.name}".
+            Esta acción no se puede deshacer.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteStageDialog(false)} disabled={deletingStage}>
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteStage} color="error" variant="contained" disabled={deletingStage}>
+            {deletingStage ? 'Eliminando...' : 'Eliminar'}
           </Button>
         </DialogActions>
       </Dialog>
