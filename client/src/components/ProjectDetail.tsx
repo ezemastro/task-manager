@@ -194,7 +194,6 @@ export default function ProjectDetail() {
   const completedStages = stages.filter(s => s.is_completed).length;
   const totalStages = stages.length;
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
-  const allStagesCompleted = totalStages > 0 && completedStages === totalStages;
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -237,7 +236,6 @@ export default function ProjectDetail() {
               color="success"
               startIcon={<CheckCircleIcon />}
               onClick={handleCompleteProject}
-              disabled={!allStagesCompleted}
             >
               Marcar Proyecto como Completado
             </Button>
