@@ -1,7 +1,7 @@
 import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
-import PeopleIcon from '@mui/icons-material/People';
+// import PeopleIcon from '@mui/icons-material/People';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import BusinessIcon from '@mui/icons-material/Business';
 import LayersIcon from '@mui/icons-material/Layers';
@@ -65,7 +65,7 @@ export default function NavigationBar() {
             Obras Completadas
           </Button>
 
-          <Button
+          {/* <Button
             component={RouterLink}
             to="/users"
             color="inherit"
@@ -77,7 +77,7 @@ export default function NavigationBar() {
             }}
           >
             Panel Usuarios
-          </Button>
+          </Button> */}
 
           <Button
             component={RouterLink}

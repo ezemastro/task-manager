@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -27,6 +27,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Link,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -459,9 +460,22 @@ export default function StageDetail() {
               </IconButton>
             </Stack>
           )}
-          {stage.project_name && (
+          {stage.project_name && stage.project_id && (
             <Typography variant="body2" color="text.secondary">
-              Proyecto: {stage.project_name}
+              Proyecto:{' '}
+              <Link
+                component={RouterLink}
+                to={`/projects/${stage.project_id}`}
+                sx={{
+                  color: 'primary.main',
+                  textDecoration: 'none',
+                  '&:hover': {
+                    textDecoration: 'underline',
+                  },
+                }}
+              >
+                {stage.project_name}
+              </Link>
             </Typography>
           )}
         </Box>
