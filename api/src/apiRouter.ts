@@ -625,7 +625,7 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, status, client_id, deadline, intermediate_date, intermediate_date_note } = req.body;
+  const { name, description, status, client_id, deadline } = req.body;
 
   const updates: string[] = [];
   const values: any[] = [];
@@ -649,14 +649,6 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   if (deadline !== undefined) {
     updates.push('deadline = ?');
     values.push(deadline);
-  }
-  if (intermediate_date !== undefined) {
-    updates.push('intermediate_date = ?');
-    values.push(intermediate_date || null);
-  }
-  if (intermediate_date_note !== undefined) {
-    updates.push('intermediate_date_note = ?');
-    values.push(intermediate_date_note || null);
   }
 
   if (updates.length === 0) {
@@ -843,54 +835,34 @@ apiRouter.post('/stages', (req: Request, res: Response) => {
 
         const order_number = result.next_order;
 
-        // Verificar que la etapa anterior esté completada (si existe)
-        if (order_number > 1) {
-          const prevStageSql = 'SELECT is_completed FROM stages WHERE project_id = ? AND order_number = ?';
-          db.get(prevStageSql, [project_id, order_number - 1], (err, prevStage: any) => {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
-            if (prevStage && !prevStage.is_completed) {
-              return res.status(400).json({ 
-                error: 'No se puede crear una nueva etapa hasta que la anterior esté completada' 
-              });
-            }
+        // Insertar la nueva etapa directamente (sin verificar etapas anteriores)
+        // Normalizar fechas para evitar problemas de zona horaria
+        const normalizedStartDate = start_date && !start_date.includes('T') 
+          ? `${start_date}T12:00:00` 
+          : start_date;
+        const normalizedEstimatedEndDate = estimated_end_date && !estimated_end_date.includes('T')
+          ? `${estimated_end_date}T12:00:00`
+          : estimated_end_date;
 
-            insertStage();
+        const sql = `
+          INSERT INTO stages (project_id, name, responsible_id, start_date, estimated_end_date, order_number) 
+          VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        db.run(sql, [project_id, name, responsible_id, normalizedStartDate, normalizedEstimatedEndDate, order_number], function (err) {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+          res.status(201).json({
+            id: this.lastID,
+            project_id,
+            name,
+            responsible_id,
+            start_date: normalizedStartDate,
+            estimated_end_date: normalizedEstimatedEndDate,
+            order_number,
+            message: 'Etapa creada exitosamente'
           });
-        } else {
-          insertStage();
-        }
-
-        function insertStage() {
-          // Normalizar fechas para evitar problemas de zona horaria
-          const normalizedStartDate = start_date && !start_date.includes('T') 
-            ? `${start_date}T12:00:00` 
-            : start_date;
-          const normalizedEstimatedEndDate = estimated_end_date && !estimated_end_date.includes('T')
-            ? `${estimated_end_date}T12:00:00`
-            : estimated_end_date;
-
-          const sql = `
-            INSERT INTO stages (project_id, name, responsible_id, start_date, estimated_end_date, order_number) 
-            VALUES (?, ?, ?, ?, ?, ?)
-          `;
-          db.run(sql, [project_id, name, responsible_id, normalizedStartDate, normalizedEstimatedEndDate, order_number], function (err) {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
-            res.status(201).json({
-              id: this.lastID,
-              project_id,
-              name,
-              responsible_id,
-              start_date: normalizedStartDate,
-              estimated_end_date: normalizedEstimatedEndDate,
-              order_number,
-              message: 'Etapa creada exitosamente'
-            });
-          });
-        }
+        });
       });
     });
   });
@@ -1171,7 +1143,7 @@ apiRouter.put('/stages/reorder', (req: Request, res: Response) => {
 // Actualizar una etapa
 apiRouter.put('/stages/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, responsible_id, start_date, estimated_end_date, completed_date } = req.body;
+  const { name, responsible_id, start_date, estimated_end_date, completed_date, intermediate_date, intermediate_date_note } = req.body;
 
   // Si se proporciona responsible_id, verificar que el usuario existe
   if (responsible_id) {
@@ -1201,6 +1173,9 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
     const normalizedCompletedDate = completed_date === null ? null : (completed_date && !completed_date.includes('T')
       ? `${completed_date}T12:00:00`
       : completed_date);
+    const normalizedIntermediateDate = intermediate_date === null ? null : (intermediate_date && !intermediate_date.includes('T')
+      ? `${intermediate_date}T12:00:00`
+      : intermediate_date);
 
     // Construir SQL dinámicamente para permitir actualizar campos opcionales
     const updates: string[] = [];
@@ -1225,6 +1200,14 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
     if (completed_date !== undefined) {
       updates.push('completed_date = ?');
       params.push(normalizedCompletedDate);
+    }
+    if (intermediate_date !== undefined) {
+      updates.push('intermediate_date = ?');
+      params.push(normalizedIntermediateDate);
+    }
+    if (intermediate_date_note !== undefined) {
+      updates.push('intermediate_date_note = ?');
+      params.push(intermediate_date_note || null);
     }
 
     if (updates.length === 0) {

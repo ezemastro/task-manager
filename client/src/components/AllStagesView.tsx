@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { apiClient, type Stage, type User, type Client, type Project } from '../services/apiClient';
+import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
 import DeadlineChip from './DeadlineChip';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'intermediate_date';
@@ -35,7 +35,6 @@ export default function AllStagesView() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -51,17 +50,15 @@ export default function AllStagesView() {
     setError('');
 
     try {
-      const [stagesData, usersData, clientsData, projectsData] = await Promise.all([
+      const [stagesData, usersData, clientsData] = await Promise.all([
         apiClient.getStages(),
         apiClient.getUsers(),
         apiClient.getClients(),
-        apiClient.getProjects(),
       ]);
 
       setStages(stagesData);
       setUsers(usersData);
       setClients(clientsData);
-      setProjects(projectsData);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar las etapas';
       setError(message);
@@ -73,13 +70,6 @@ export default function AllStagesView() {
   useEffect(() => {
     fetchData();
   }, []);
-
-  // Crear un mapa de proyectos por ID para acceso rápido
-  const projectsMap = useMemo(() => {
-    const map = new Map<number, Project>();
-    projects.forEach(p => map.set(p.id, p));
-    return map;
-  }, [projects]);
 
   // Filtrar y ordenar etapas - SOLO MOSTRAR ETAPAS EN PROCESO
   const filteredAndSortedStages = useMemo(() => {
@@ -124,14 +114,10 @@ export default function AllStagesView() {
           return new Date(a.estimated_end_date).getTime() - new Date(b.estimated_end_date).getTime();
         }
         case 'intermediate_date': {
-          const projectA = projectsMap.get(a.project_id);
-          const projectB = projectsMap.get(b.project_id);
-          const dateA = projectA?.intermediate_date;
-          const dateB = projectB?.intermediate_date;
-          if (!dateA && !dateB) return 0;
-          if (!dateA) return 1;
-          if (!dateB) return -1;
-          return new Date(dateA).getTime() - new Date(dateB).getTime();
+          if (!a.intermediate_date && !b.intermediate_date) return 0;
+          if (!a.intermediate_date) return 1;
+          if (!b.intermediate_date) return -1;
+          return new Date(a.intermediate_date).getTime() - new Date(b.intermediate_date).getTime();
         }
         default:
           return 0;
@@ -139,7 +125,7 @@ export default function AllStagesView() {
     });
 
     return filtered;
-  }, [stages, searchTerm, selectedUser, selectedClient, sortBy, projectsMap]);
+  }, [stages, searchTerm, selectedUser, selectedClient, sortBy]);
 
   if (loading) {
     return (
@@ -342,7 +328,6 @@ export default function AllStagesView() {
             </TableHead>
             <TableBody>
               {filteredAndSortedStages.map((stage) => {
-                const project = projectsMap.get(stage.project_id);
                 const recentComment = stage.recent_comments && stage.recent_comments.length > 0 
                   ? stage.recent_comments[0] 
                   : null;
@@ -378,15 +363,15 @@ export default function AllStagesView() {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        {project?.intermediate_date ? (
+                        {stage.intermediate_date ? (
                           <Tooltip 
-                            title={project.intermediate_date_note || 'Sin comentario'} 
+                            title={stage.intermediate_date_note || 'Sin comentario'} 
                             arrow
                             placement="top"
                           >
                             <Box sx={{ display: 'inline-block', cursor: 'help' }}>
                               <DeadlineChip
-                                date={project.intermediate_date}
+                                date={stage.intermediate_date}
                                 isCompleted={false}
                                 size="small"
                                 showIcon={false}

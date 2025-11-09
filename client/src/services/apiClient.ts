@@ -34,8 +34,6 @@ export interface Project {
   client_id?: number;
   client_name?: string;
   deadline?: string;
-  intermediate_date?: string;
-  intermediate_date_note?: string;
   created_at: string;
   updated_at: string;
   total_stages?: number;
@@ -55,6 +53,8 @@ export interface Stage {
   start_date?: string;
   estimated_end_date?: string;
   completed_date?: string;
+  intermediate_date?: string;
+  intermediate_date_note?: string;
   order_number: number;
   is_completed: boolean;
   created_at: string;
@@ -87,6 +87,8 @@ export interface StageDetail {
   start_date?: string;
   estimated_end_date?: string;
   completed_date?: string;
+  intermediate_date?: string;
+  intermediate_date_note?: string;
   order_number: number;
   is_completed: boolean;
   created_at: string;
@@ -129,8 +131,6 @@ export interface UpdateProjectRequest {
   status?: string;
   client_id?: number;
   deadline?: string;
-  intermediate_date?: string | null;
-  intermediate_date_note?: string | null;
 }
 
 export interface CreateStageRequest {
@@ -147,6 +147,8 @@ export interface UpdateStageRequest {
   start_date?: string | null;
   estimated_end_date?: string | null;
   completed_date?: string | null;
+  intermediate_date?: string | null;
+  intermediate_date_note?: string | null;
 }
 
 export interface CreateUserRequest {

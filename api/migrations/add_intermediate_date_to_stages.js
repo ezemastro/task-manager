@@ -14,11 +14,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Migración
 db.serialize(() => {
-  console.log('Iniciando migración: agregar intermediate_date e intermediate_date_note a la tabla projects...');
+  console.log('Iniciando migración: agregar intermediate_date e intermediate_date_note a la tabla stages...');
 
   // Agregar columna intermediate_date
   db.run(`
-    ALTER TABLE projects 
+    ALTER TABLE stages 
     ADD COLUMN intermediate_date TEXT
   `, (err) => {
     if (err) {
@@ -37,7 +37,7 @@ db.serialize(() => {
 
   // Agregar columna intermediate_date_note
   db.run(`
-    ALTER TABLE projects 
+    ALTER TABLE stages 
     ADD COLUMN intermediate_date_note TEXT
   `, (err) => {
     if (err) {
@@ -54,9 +54,9 @@ db.serialize(() => {
     }
     
     // Cerrar la base de datos después de completar todas las operaciones
-    console.log('\nMigración completada exitosamente.');
-    console.log('Las siguientes columnas han sido agregadas a la tabla projects:');
-    console.log('  - intermediate_date (TEXT): Fecha intermedia del proyecto');
+    console.log('\n✅ Migración completada exitosamente.');
+    console.log('Las siguientes columnas han sido agregadas a la tabla stages:');
+    console.log('  - intermediate_date (TEXT): Fecha intermedia de la etapa');
     console.log('  - intermediate_date_note (TEXT): Comentario/nota para la fecha intermedia');
     
     db.close((err) => {
