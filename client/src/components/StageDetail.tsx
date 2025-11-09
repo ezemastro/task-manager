@@ -37,12 +37,13 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
-import { apiClient, type StageDetail, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
+import { apiClient, type StageDetail, type Tag, type CreateCommentRequest, type User, type Project } from '../services/apiClient';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [stage, setStage] = useState<StageDetail | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,7 @@ export default function StageDetail() {
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editCommentContent, setEditCommentContent] = useState('');
 
-  // Estados para edición inline
+  // Estados para edición inline de la etapa
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [editingResponsible, setEditingResponsible] = useState(false);
@@ -76,6 +77,12 @@ export default function StageDetail() {
   const [editingCompletedDate, setEditingCompletedDate] = useState(false);
   const [editCompletedDate, setEditCompletedDate] = useState('');
 
+  // Estados para edición inline de fecha intermedia del proyecto
+  const [editingIntermediateDate, setEditingIntermediateDate] = useState(false);
+  const [editIntermediateDate, setEditIntermediateDate] = useState('');
+  const [editingIntermediateDateNote, setEditingIntermediateDateNote] = useState(false);
+  const [editIntermediateDateNote, setEditIntermediateDateNote] = useState('');
+
   const fetchStageDetail = useCallback(async () => {
     if (!id) return;
     
@@ -84,6 +91,12 @@ export default function StageDetail() {
     try {
       const stageData = await apiClient.getStage(Number(id));
       setStage(stageData);
+      
+      // Cargar también los datos del proyecto
+      if (stageData.project_id) {
+        const projectData = await apiClient.getProject(stageData.project_id);
+        setProject(projectData);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar etapa';
       setError(message);
@@ -324,6 +337,34 @@ export default function StageDetail() {
     }
   };
 
+  const handleSaveIntermediateDate = async () => {
+    if (!project) return;
+    try {
+      await apiClient.updateProject(project.id, { 
+        intermediate_date: editIntermediateDate || null 
+      });
+      setEditingIntermediateDate(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar fecha intermedia';
+      setError(message);
+    }
+  };
+
+  const handleSaveIntermediateDateNote = async () => {
+    if (!project) return;
+    try {
+      await apiClient.updateProject(project.id, { 
+        intermediate_date_note: editIntermediateDateNote || null 
+      });
+      setEditingIntermediateDateNote(false);
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al actualizar nota de fecha intermedia';
+      setError(message);
+    }
+  };
+
   const startEditingName = () => {
     setEditName(stage?.name || '');
     setEditingName(true);
@@ -347,6 +388,16 @@ export default function StageDetail() {
   const startEditingCompletedDate = () => {
     setEditCompletedDate(stage?.completed_date ? stage.completed_date.split('T')[0] : '');
     setEditingCompletedDate(true);
+  };
+
+  const startEditingIntermediateDate = () => {
+    setEditIntermediateDate(project?.intermediate_date ? project.intermediate_date.split('T')[0] : '');
+    setEditingIntermediateDate(true);
+  };
+
+  const startEditingIntermediateDateNote = () => {
+    setEditIntermediateDateNote(project?.intermediate_date_note || '');
+    setEditingIntermediateDateNote(true);
   };
 
   if (loading) {
@@ -655,6 +706,102 @@ export default function StageDetail() {
                   </Box>
                 ): null}
               </Stack>
+
+              {/* Fecha intermedia del proyecto */}
+              {project && (
+                <>
+                  <Divider sx={{ my: 3 }} />
+                  
+                  <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
+                    Fecha Intermedia del Proyecto
+                  </Typography>
+
+                  <Stack spacing={2}>
+                    {/* Fecha intermedia */}
+                    <Box>
+                      <Stack direction="row" justifyContent="start" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Fecha
+                        </Typography>
+                        {!editingIntermediateDate && (
+                          <IconButton size="small" onClick={startEditingIntermediateDate}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Stack>
+                      {editingIntermediateDate ? (
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <TextField
+                            type="date"
+                            value={editIntermediateDate}
+                            onChange={(e) => setEditIntermediateDate(e.target.value)}
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ shrink: true }}
+                          />
+                          <IconButton color="primary" onClick={handleSaveIntermediateDate} size="small">
+                            <SaveIcon />
+                          </IconButton>
+                          <IconButton onClick={() => setEditingIntermediateDate(false)} size="small">
+                            <CloseIcon />
+                          </IconButton>
+                        </Stack>
+                      ) : project.intermediate_date ? (
+                        <Typography variant="body2">
+                          {new Date(project.intermediate_date).toLocaleDateString()}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                          Sin fecha
+                        </Typography>
+                      )}
+                    </Box>
+
+                    {/* Comentario de fecha intermedia */}
+                    <Box>
+                      <Stack direction="row" justifyContent="start" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Comentario
+                        </Typography>
+                        {!editingIntermediateDateNote && (
+                          <IconButton size="small" onClick={startEditingIntermediateDateNote}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Stack>
+                      {editingIntermediateDateNote ? (
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <TextField
+                            value={editIntermediateDateNote}
+                            onChange={(e) => setEditIntermediateDateNote(e.target.value)}
+                            size="small"
+                            fullWidth
+                            multiline
+                            rows={2}
+                            placeholder="Escribe un comentario sobre esta fecha..."
+                          />
+                          <Stack direction="column" spacing={0.5}>
+                            <IconButton color="primary" onClick={handleSaveIntermediateDateNote} size="small">
+                              <SaveIcon />
+                            </IconButton>
+                            <IconButton onClick={() => setEditingIntermediateDateNote(false)} size="small">
+                              <CloseIcon />
+                            </IconButton>
+                          </Stack>
+                        </Stack>
+                      ) : project.intermediate_date_note ? (
+                        <Typography variant="body2">
+                          {project.intermediate_date_note}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                          Sin comentario
+                        </Typography>
+                      )}
+                    </Box>
+                  </Stack>
+                </>
+              )}
             </Box>
           </Stack>
         </CardContent>

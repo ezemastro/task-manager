@@ -625,7 +625,7 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, status, client_id, deadline } = req.body;
+  const { name, description, status, client_id, deadline, intermediate_date, intermediate_date_note } = req.body;
 
   const updates: string[] = [];
   const values: any[] = [];
@@ -649,6 +649,14 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   if (deadline !== undefined) {
     updates.push('deadline = ?');
     values.push(deadline);
+  }
+  if (intermediate_date !== undefined) {
+    updates.push('intermediate_date = ?');
+    values.push(intermediate_date || null);
+  }
+  if (intermediate_date_note !== undefined) {
+    updates.push('intermediate_date_note = ?');
+    values.push(intermediate_date_note || null);
   }
 
   if (updates.length === 0) {
