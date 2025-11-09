@@ -22,18 +22,20 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
+import { apiClient, type Stage, type User, type Client, type Project } from '../services/apiClient';
 import DeadlineChip from './DeadlineChip';
 
-type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'status';
+type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'intermediate_date';
 
 export default function AllStagesView() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -41,7 +43,6 @@ export default function AllStagesView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedClient, setSelectedClient] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('active'); // all, active, completed
   const [sortBy, setSortBy] = useState<SortOption>('project');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -50,15 +51,17 @@ export default function AllStagesView() {
     setError('');
 
     try {
-      const [stagesData, usersData, clientsData] = await Promise.all([
+      const [stagesData, usersData, clientsData, projectsData] = await Promise.all([
         apiClient.getStages(),
         apiClient.getUsers(),
         apiClient.getClients(),
+        apiClient.getProjects(),
       ]);
 
       setStages(stagesData);
       setUsers(usersData);
       setClients(clientsData);
+      setProjects(projectsData);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar las etapas';
       setError(message);
@@ -71,9 +74,17 @@ export default function AllStagesView() {
     fetchData();
   }, []);
 
-  // Filtrar y ordenar etapas
+  // Crear un mapa de proyectos por ID para acceso rápido
+  const projectsMap = useMemo(() => {
+    const map = new Map<number, Project>();
+    projects.forEach(p => map.set(p.id, p));
+    return map;
+  }, [projects]);
+
+  // Filtrar y ordenar etapas - SOLO MOSTRAR ETAPAS EN PROCESO
   const filteredAndSortedStages = useMemo(() => {
-    let filtered = [...stages];
+    // Filtrar solo etapas en proceso (tienen start_date y no están completadas)
+    let filtered = stages.filter((s) => !s.is_completed && s.start_date);
 
     // Filtro por búsqueda
     if (searchTerm.trim()) {
@@ -97,13 +108,6 @@ export default function AllStagesView() {
       filtered = filtered.filter((s) => s.client_id?.toString() === selectedClient);
     }
 
-    // Filtro por estado
-    if (statusFilter === 'active') {
-      filtered = filtered.filter((s) => !s.is_completed && s.start_date); // Solo etapas con start_date (en proceso)
-    } else if (statusFilter === 'completed') {
-      filtered = filtered.filter((s) => s.is_completed);
-    }
-
     // Ordenar
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -119,15 +123,23 @@ export default function AllStagesView() {
           if (!b.estimated_end_date) return -1;
           return new Date(a.estimated_end_date).getTime() - new Date(b.estimated_end_date).getTime();
         }
-        case 'status':
-          return (a.is_completed ? 1 : 0) - (b.is_completed ? 1 : 0);
+        case 'intermediate_date': {
+          const projectA = projectsMap.get(a.project_id);
+          const projectB = projectsMap.get(b.project_id);
+          const dateA = projectA?.intermediate_date;
+          const dateB = projectB?.intermediate_date;
+          if (!dateA && !dateB) return 0;
+          if (!dateA) return 1;
+          if (!dateB) return -1;
+          return new Date(dateA).getTime() - new Date(dateB).getTime();
+        }
         default:
           return 0;
       }
     });
 
     return filtered;
-  }, [stages, searchTerm, selectedUser, selectedClient, statusFilter, sortBy]);
+  }, [stages, searchTerm, selectedUser, selectedClient, sortBy, projectsMap]);
 
   if (loading) {
     return (
@@ -157,7 +169,7 @@ export default function AllStagesView() {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">
-          Todas las Etapas
+          Etapas en Proceso
         </Typography>
         <Stack direction="row" spacing={2}>
           <Button
@@ -241,21 +253,6 @@ export default function AllStagesView() {
 
               <Box sx={{ flex: '1 1 180px', minWidth: '150px' }}>
                 <FormControl fullWidth>
-                  <InputLabel>Estado</InputLabel>
-                  <Select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    label="Estado"
-                  >
-                    <MenuItem value="all">Todas</MenuItem>
-                    <MenuItem value="active">En proceso</MenuItem>
-                    <MenuItem value="completed">Completadas</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
-
-              <Box sx={{ flex: '1 1 180px', minWidth: '150px' }}>
-                <FormControl fullWidth>
                   <InputLabel>Ordenar por</InputLabel>
                   <Select
                     value={sortBy}
@@ -265,8 +262,8 @@ export default function AllStagesView() {
                     <MenuItem value="project">Proyecto</MenuItem>
                     <MenuItem value="stage">Etapa</MenuItem>
                     <MenuItem value="responsible">Responsable</MenuItem>
-                    <MenuItem value="deadline">Fecha límite</MenuItem>
-                    <MenuItem value="status">Estado</MenuItem>
+                    <MenuItem value="intermediate_date">Fecha Intermedia</MenuItem>
+                    <MenuItem value="deadline">Fecha Límite</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
@@ -299,21 +296,13 @@ export default function AllStagesView() {
                     onDelete={() => setSelectedClient('')}
                   />
                 )}
-                {statusFilter !== 'all' && (
-                  <Chip
-                    label={`Estado: ${statusFilter === 'active' ? 'En proceso' : 'Completadas'}`}
-                    size="small"
-                    onDelete={() => setStatusFilter('all')}
-                  />
-                )}
-                {(searchTerm || selectedUser || selectedClient || statusFilter !== 'all') && (
+                {(searchTerm || selectedUser || selectedClient) && (
                   <Button
                     size="small"
                     onClick={() => {
                       setSearchTerm('');
                       setSelectedUser('');
                       setSelectedClient('');
-                      setStatusFilter('all');
                     }}
                   >
                     Limpiar todo
@@ -334,8 +323,8 @@ export default function AllStagesView() {
 
       {filteredAndSortedStages.length === 0 ? (
         <Alert severity="info">
-          {stages.length === 0
-            ? 'No hay etapas en el sistema.'
+          {stages.filter(s => !s.is_completed && s.start_date).length === 0
+            ? 'No hay etapas en proceso en este momento.'
             : 'No se encontraron etapas con los filtros aplicados.'}
         </Alert>
       ) : (
@@ -343,97 +332,161 @@ export default function AllStagesView() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell><strong>Proyecto</strong></TableCell>
-                <TableCell><strong>Etapa</strong></TableCell>
-                <TableCell><strong>Responsable</strong></TableCell>
-                <TableCell><strong>Cliente</strong></TableCell>
-                <TableCell><strong>Fecha Inicio</strong></TableCell>
-                <TableCell><strong>Fecha Límite</strong></TableCell>
-                <TableCell><strong>Fecha Finalización</strong></TableCell>
-                <TableCell><strong>Estado</strong></TableCell>
+                <TableCell sx={{ width: '15%' }}><strong>Proyecto</strong></TableCell>
+                <TableCell sx={{ width: '15%' }}><strong>Etapa</strong></TableCell>
+                <TableCell sx={{ width: '12%' }}><strong>Responsable</strong></TableCell>
+                <TableCell sx={{ width: '10%' }}><strong>Fecha Intermedia</strong></TableCell>
+                <TableCell sx={{ width: '10%' }}><strong>Fecha Límite</strong></TableCell>
+                <TableCell sx={{ width: '15%' }}><strong>Etiquetas</strong></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredAndSortedStages.map((stage) => (
-                <TableRow 
-                  key={stage.id}
-                  component={RouterLink}
-                  to={`/stages/${stage.id}`}
-                  sx={{
-                    textDecoration: 'none',
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="medium">
-                      {stage.project_name}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{stage.name}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color={stage.responsible_id ? 'inherit' : 'warning.main'}>
-                      {stage.responsible_name || 'Sin asignar'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {stage.client_name || '-'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color={stage.start_date ? 'inherit' : 'text.secondary'}>
-                      {stage.start_date
-                        ? new Date(stage.start_date).toLocaleDateString('es-ES')
-                        : 'Sin fecha'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {stage.estimated_end_date ? (
-                      <DeadlineChip
-                        date={stage.estimated_end_date}
-                        isCompleted={stage.is_completed}
-                        size="small"
-                        showIcon={false}
-                      />
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        Sin fecha
-                      </Typography>
+              {filteredAndSortedStages.map((stage) => {
+                const project = projectsMap.get(stage.project_id);
+                const recentComment = stage.recent_comments && stage.recent_comments.length > 0 
+                  ? stage.recent_comments[0] 
+                  : null;
+                const truncatedContent = recentComment 
+                  ? (recentComment.content.length > 150 
+                      ? recentComment.content.substring(0, 150) + '...' 
+                      : recentComment.content)
+                  : null;
+                
+                return (
+                  <>
+                    <TableRow 
+                      key={stage.id}
+                      component={RouterLink}
+                      to={`/stages/${stage.id}`}
+                      sx={{
+                        textDecoration: 'none',
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.hover' },
+                      }}
+                    >
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="medium">
+                          {stage.project_name}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{stage.name}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color={stage.responsible_id ? 'inherit' : 'warning.main'}>
+                          {stage.responsible_name || 'Sin asignar'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {project?.intermediate_date ? (
+                          <Tooltip 
+                            title={project.intermediate_date_note || 'Sin comentario'} 
+                            arrow
+                            placement="top"
+                          >
+                            <Box sx={{ display: 'inline-block', cursor: 'help' }}>
+                              <DeadlineChip
+                                date={project.intermediate_date}
+                                isCompleted={false}
+                                size="small"
+                                showIcon={false}
+                              />
+                            </Box>
+                          </Tooltip>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {stage.estimated_end_date ? (
+                          <DeadlineChip
+                            date={stage.estimated_end_date}
+                            isCompleted={stage.is_completed}
+                            size="small"
+                            showIcon={false}
+                          />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Sin fecha
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {stage.tags && stage.tags.length > 0 ? (
+                          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                            {stage.tags.slice(0, 3).map((tag) => (
+                              <Chip
+                                key={tag.id}
+                                label={tag.name}
+                                size="small"
+                                sx={{
+                                  bgcolor: tag.color || undefined,
+                                  color: tag.color ? '#fff' : undefined,
+                                  fontSize: '0.7rem',
+                                  height: 20,
+                                }}
+                              />
+                            ))}
+                            {stage.tags.length > 3 && (
+                              <Chip
+                                label={`+${stage.tags.length - 3}`}
+                                size="small"
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  height: 20,
+                                }}
+                              />
+                            )}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                    
+                    {/* Fila de comentario justo debajo de la etapa */}
+                    {truncatedContent && recentComment && (
+                      <TableRow key={`${stage.id}-comment`}>
+                        <TableCell 
+                          colSpan={6} 
+                          sx={{ 
+                            py: 1, 
+                            bgcolor: 'action.hover',
+                            borderBottom: 2,
+                            borderColor: 'divider'
+                          }}
+                        >
+                          <Stack direction="row" spacing={1} alignItems="baseline" sx={{ px: 1 }}>
+                            <Typography 
+                              variant="caption" 
+                              color="primary"
+                              sx={{ 
+                                fontWeight: 600,
+                                flexShrink: 0
+                              }}
+                            >
+                              💬 {recentComment.author}:
+                            </Typography>
+                            <Typography 
+                              variant="caption" 
+                              color="text.secondary"
+                              sx={{ 
+                                fontStyle: 'italic',
+                              }}
+                            >
+                              {truncatedContent}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color={stage.completed_date ? 'success.main' : 'text.secondary'}>
-                      {stage.completed_date
-                        ? new Date(stage.completed_date).toLocaleDateString('es-ES')
-                        : stage.is_completed 
-                          ? 'Completada' 
-                          : '-'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={
-                        stage.is_completed 
-                          ? 'Completada' 
-                          : stage.start_date 
-                            ? 'En proceso' 
-                            : 'Pendiente'
-                      }
-                      color={
-                        stage.is_completed 
-                          ? 'success' 
-                          : stage.start_date 
-                            ? 'primary' 
-                            : 'default'
-                      }
-                      size="small"
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
+                  </>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
