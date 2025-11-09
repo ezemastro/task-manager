@@ -48,7 +48,7 @@ export default function NavigationBar() {
               '&:hover': { borderColor: 'white' }
             }}
           >
-            Todas las Etapas
+            Etapas en Proceso
           </Button>
 
           <Button

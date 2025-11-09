@@ -43,7 +43,7 @@ export default function AllStagesView() {
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('project');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   const fetchData = async () => {
     setLoading(true);
@@ -157,18 +157,13 @@ export default function AllStagesView() {
         <Typography variant="h4" component="h1">
           Etapas en Proceso
         </Typography>
-        <Stack direction="row" spacing={2}>
-          <Button
-            variant="outlined"
-            startIcon={<FilterListIcon />}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            {showFilters ? 'Ocultar' : 'Mostrar'} Filtros
-          </Button>
-          <Button variant="outlined" onClick={fetchData}>
-            Actualizar
-          </Button>
-        </Stack>
+        <Button
+          variant="outlined"
+          startIcon={<FilterListIcon />}
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          {showFilters ? 'Ocultar' : 'Mostrar'} Filtros
+        </Button>
       </Box>
 
       {/* Panel de Filtros */}
