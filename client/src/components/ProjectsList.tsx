@@ -185,7 +185,7 @@ export default function ProjectsList() {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">
           Mis Proyectos
@@ -346,7 +346,20 @@ export default function ProjectsList() {
             : 'No se encontraron proyectos con los filtros aplicados.'}
         </Alert>
       ) : (
-        <Stack spacing={2}>
+        <Box 
+          sx={{ 
+            columnCount: {
+              xs: 1,
+              sm: 2,
+              lg: 3,
+            },
+            columnGap: 1.5,
+            '& > *': {
+              breakInside: 'avoid',
+              marginBottom: 1.5,
+            }
+          }}
+        >
           {filteredAndSortedProjects.map((project) => (
             <ProjectCard
               key={project.id}
@@ -359,7 +372,7 @@ export default function ProjectsList() {
               onStageCompleted={handleRefresh}
             />
           ))}
-        </Stack>
+        </Box>
       )}
 
       <CreateProjectModal

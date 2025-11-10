@@ -44,15 +44,27 @@ export default function ProjectCard({
     <Card 
       elevation={2} 
       sx={{ 
-        mb: 2,
         position: 'relative',
+        maxWidth: 450,
+        width: '100%',
+        height: 'fit-content',
       }}
     >
       <CardContent sx={{ pb: 2, '&:last-child': { pb: 2 } }}>
         {/* Header compacto */}
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-          <Box sx={{ flexGrow: 1, pr: 1 }}>
-            <Typography variant="h4" component="h2" sx={{ mb: 0.5, lineHeight: 1.3 }}>
+          <Box sx={{ flexGrow: 1, pr: 1, minWidth: 0 }}>
+            <Typography 
+              variant="h4" 
+              component="h2" 
+              sx={{ 
+                mb: 0.5, 
+                lineHeight: 1.3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {projectName}
             </Typography>
             
@@ -77,9 +89,17 @@ export default function ProjectCard({
             {/* Cliente y Fecha límite */}
             <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
               {clientName && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <BusinessIcon fontSize="small" color="action" />
-                  <Typography variant="caption" color="text.secondary">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                  <BusinessIcon fontSize="small" color="action" sx={{ flexShrink: 0 }} />
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary"
+                    sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {clientName}
                   </Typography>
                 </Box>

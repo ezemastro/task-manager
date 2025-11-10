@@ -130,7 +130,7 @@ export default function CompletedProjectsView() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
         <IconButton onClick={() => navigate(-1)}>
           <ArrowBackIcon />
@@ -250,7 +250,20 @@ export default function CompletedProjectsView() {
             : 'No se encontraron proyectos con los filtros aplicados.'}
         </Alert>
       ) : (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+        <Box 
+          sx={{ 
+            columnCount: {
+              xs: 1,
+              sm: 2,
+              lg: 3,
+            },
+            columnGap: 1.5,
+            '& > *': {
+              breakInside: 'avoid',
+              marginBottom: 1.5,
+            }
+          }}
+        >
           {filteredAndSortedProjects.map((project) => (
             <ProjectCard
               key={project.id}
