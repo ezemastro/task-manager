@@ -7,6 +7,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import LayersIcon from '@mui/icons-material/Layers';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PauseCircleIcon from '@mui/icons-material/PauseCircle';
 
 export default function NavigationBar() {
   const location = useLocation();
@@ -63,6 +64,20 @@ export default function NavigationBar() {
             }}
           >
             Obras Completadas
+          </Button>
+
+          <Button
+            component={RouterLink}
+            to="/paused-projects"
+            color="inherit"
+            startIcon={<PauseCircleIcon />}
+            variant={isActive('/paused-projects') ? 'outlined' : 'text'}
+            sx={{ 
+              borderColor: 'white',
+              '&:hover': { borderColor: 'white' }
+            }}
+          >
+            Obras Paralizadas
           </Button>
 
           {/* <Button

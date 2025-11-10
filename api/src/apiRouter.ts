@@ -504,9 +504,9 @@ apiRouter.get('/projects', (req: Request, res: Response) => {
     sql += ' AND p.status = ?';
     params.push(status);
   } else {
-    // Por defecto, no mostrar proyectos completados
-    sql += ' AND p.status != ?';
-    params.push('completed');
+    // Por defecto, solo mostrar proyectos activos (no completados ni paralizados)
+    sql += ' AND p.status = ?';
+    params.push('active');
   }
 
   sql += ' GROUP BY p.id';
@@ -901,7 +901,7 @@ apiRouter.get('/stages', (req: Request, res: Response) => {
     INNER JOIN projects p ON s.project_id = p.id
     LEFT JOIN users u ON s.responsible_id = u.id
     LEFT JOIN clients c ON p.client_id = c.id
-    WHERE p.status != 'completed'
+    WHERE p.status = 'active'
   `;
   const params: any[] = [];
 

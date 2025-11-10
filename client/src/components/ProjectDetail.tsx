@@ -26,6 +26,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import PauseCircleIcon from '@mui/icons-material/PauseCircle';
+import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import { apiClient, type Project, type Stage } from '../services/apiClient';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
@@ -105,6 +107,30 @@ export default function ProjectDetail() {
       await fetchProjectDetail();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al reabrir proyecto';
+      setError(message);
+    }
+  };
+
+  const handlePauseProject = async () => {
+    if (!id || !project) return;
+    
+    try {
+      await apiClient.updateProject(Number(id), { status: 'paused' });
+      await fetchProjectDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al paralizar proyecto';
+      setError(message);
+    }
+  };
+
+  const handleResumeProject = async () => {
+    if (!id || !project) return;
+    
+    try {
+      await apiClient.updateProject(Number(id), { status: 'active' });
+      await fetchProjectDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al reactivar proyecto';
       setError(message);
     }
   };
@@ -256,15 +282,37 @@ export default function ProjectDetail() {
               </Button>
               <Chip label="Completado" color="success" icon={<CheckCircleIcon />} />
             </Stack>
+          ) : project.status === 'paused' ? (
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                color="success"
+                startIcon={<PlayCircleIcon />}
+                onClick={handleResumeProject}
+              >
+                Reactivar Proyecto
+              </Button>
+              <Chip label="Paralizado" color="warning" icon={<PauseCircleIcon />} />
+            </Stack>
           ) : (
-            <Button
-              variant="outlined"
-              color="success"
-              startIcon={<CheckCircleIcon />}
-              onClick={handleCompleteProject}
-            >
-              Marcar Proyecto como Completado
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                color="warning"
+                startIcon={<PauseCircleIcon />}
+                onClick={handlePauseProject}
+              >
+                Paralizar Proyecto
+              </Button>
+              <Button
+                variant="outlined"
+                color="success"
+                startIcon={<CheckCircleIcon />}
+                onClick={handleCompleteProject}
+              >
+                Completar Proyecto
+              </Button>
+            </Stack>
           )}
         </Stack>
       </Stack>
