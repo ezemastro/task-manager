@@ -390,7 +390,7 @@ export default function ProjectsList() {
               sm: 2,
               lg: 3,
             },
-            columnGap: 1.5,
+            columnGap: 1,
             '& > *': {
               breakInside: 'avoid',
               marginBottom: 1.5,
