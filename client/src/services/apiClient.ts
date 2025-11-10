@@ -33,6 +33,8 @@ export interface Project {
   status: string;
   client_id?: number;
   client_name?: string;
+  responsible_id?: number;
+  responsible_name?: string;
   deadline?: string;
   created_at: string;
   updated_at: string;
@@ -122,6 +124,7 @@ export interface CreateProjectRequest {
   name: string;
   description?: string;
   client_id?: number;
+  responsible_id?: number;
   deadline?: string;
 }
 
@@ -130,6 +133,7 @@ export interface UpdateProjectRequest {
   description?: string;
   status?: string;
   client_id?: number;
+  responsible_id?: number;
   deadline?: string;
 }
 

@@ -410,14 +410,14 @@ apiRouter.delete('/stage-templates/:id', (req: Request, res: Response) => {
 
 // Crear un nuevo proyecto
 apiRouter.post('/projects', (req: Request, res: Response) => {
-  const { name, description, client_id, deadline } = req.body;
+  const { name, description, client_id, responsible_id, deadline } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre del proyecto es requerido' });
   }
 
-  const sql = 'INSERT INTO projects (name, description, client_id, deadline) VALUES (?, ?, ?, ?)';
-  db.run(sql, [name, description || null, client_id || null, deadline || null], function (err) {
+  const sql = 'INSERT INTO projects (name, description, client_id, responsible_id, deadline) VALUES (?, ?, ?, ?, ?)';
+  db.run(sql, [name, description || null, client_id || null, responsible_id || null, deadline || null], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -483,11 +483,13 @@ apiRouter.get('/projects', (req: Request, res: Response) => {
     SELECT 
       p.*,
       c.name as client_name,
+      u.name as responsible_name,
       COUNT(DISTINCT s.id) as total_stages,
       COUNT(DISTINCT CASE WHEN s.is_completed = 1 THEN s.id END) as completed_stages,
       (SELECT name FROM stages WHERE project_id = p.id AND is_completed = 0 ORDER BY order_number LIMIT 1) as current_stage
     FROM projects p
     LEFT JOIN clients c ON p.client_id = c.id
+    LEFT JOIN users u ON p.responsible_id = u.id
     LEFT JOIN stages s ON p.id = s.project_id
     WHERE 1=1
   `;
@@ -530,9 +532,10 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
   const projectSql = `
-    SELECT p.*, c.name as client_name 
+    SELECT p.*, c.name as client_name, u.name as responsible_name 
     FROM projects p
     LEFT JOIN clients c ON p.client_id = c.id
+    LEFT JOIN users u ON p.responsible_id = u.id
     WHERE p.id = ?
   `;
   
@@ -625,7 +628,7 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, status, client_id, deadline } = req.body;
+  const { name, description, status, client_id, responsible_id, deadline } = req.body;
 
   const updates: string[] = [];
   const values: any[] = [];
@@ -645,6 +648,10 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   if (client_id !== undefined) {
     updates.push('client_id = ?');
     values.push(client_id);
+  }
+  if (responsible_id !== undefined) {
+    updates.push('responsible_id = ?');
+    values.push(responsible_id);
   }
   if (deadline !== undefined) {
     updates.push('deadline = ?');

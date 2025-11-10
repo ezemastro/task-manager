@@ -15,7 +15,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import { apiClient, type CreateProjectRequest, type Client } from '../services/apiClient';
+import { apiClient, type CreateProjectRequest, type Client, type User } from '../services/apiClient';
 import CreateClientModal from './CreateClientModal';
 
 interface CreateProjectModalProps {
@@ -33,10 +33,12 @@ export default function CreateProjectModal({
     name: '',
     description: '',
     client_id: undefined,
+    responsible_id: undefined,
     deadline: undefined,
   });
   
   const [clients, setClients] = useState<Client[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [createClientModalOpen, setCreateClientModalOpen] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
   const [loading, setLoading] = useState(false);
@@ -44,6 +46,7 @@ export default function CreateProjectModal({
 
   useEffect(() => {
     fetchClients();
+    fetchUsers();
   }, []);
 
   const fetchClients = async () => {
@@ -52,6 +55,15 @@ export default function CreateProjectModal({
       setClients(data);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const data = await apiClient.getUsers();
+      setUsers(data);
+    } catch (err) {
+      console.error('Error al cargar usuarios:', err);
     }
   };
 
@@ -107,6 +119,7 @@ export default function CreateProjectModal({
         name: '',
         description: '',
         client_id: undefined,
+        responsible_id: undefined,
         deadline: undefined,
       });
       setErrors({});
@@ -130,6 +143,7 @@ export default function CreateProjectModal({
       const hasChanges = formData.name.trim() !== '' || 
                          formData.description?.trim() !== '' || 
                          formData.client_id !== undefined || 
+                         formData.responsible_id !== undefined ||
                          formData.deadline !== undefined;
       
       if (hasChanges) {
@@ -139,7 +153,7 @@ export default function CreateProjectModal({
         if (!confirm) return;
       }
       
-      setFormData({ name: '', description: '', client_id: undefined, deadline: undefined });
+      setFormData({ name: '', description: '', client_id: undefined, responsible_id: undefined, deadline: undefined });
       setErrors({});
       setErrorMessage('');
       onClose();
@@ -188,6 +202,25 @@ export default function CreateProjectModal({
               Nuevo Cliente
             </Button>
           </Box>
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Responsable</InputLabel>
+            <Select
+              value={formData.responsible_id || ''}
+              onChange={(e) => setFormData({ ...formData, responsible_id: e.target.value ? Number(e.target.value) : undefined })}
+              label="Responsable"
+              disabled={loading}
+            >
+              <MenuItem value="">
+                <em>Sin responsable</em>
+              </MenuItem>
+              {users.map((user) => (
+                <MenuItem key={user.id} value={user.id}>
+                  {user.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <TextField
             fullWidth

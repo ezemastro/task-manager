@@ -296,7 +296,17 @@ export default function ProjectDetail() {
               <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: 1 }} />
             </Box>
 
-            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap alignItems="center">
+              {project.responsible_name && (
+                <Box>
+                  <Typography variant="body2" color="text.secondary" component="span">
+                    Responsable:{' '}
+                  </Typography>
+                  <Typography variant="body2" fontWeight="medium" component="span">
+                    {project.responsible_name}
+                  </Typography>
+                </Box>
+              )}
               <Typography variant="caption" color="text.secondary">
                 Creado: {new Date(project.created_at).toLocaleDateString()}
               </Typography>
@@ -423,6 +433,7 @@ export default function ProjectDetail() {
           name: project.name,
           description: project.description,
           client_id: project.client_id,
+          responsible_id: project.responsible_id,
           deadline: project.deadline,
         }}
       />

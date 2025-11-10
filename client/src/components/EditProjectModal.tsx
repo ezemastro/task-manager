@@ -14,7 +14,7 @@ import {
   Select,
   MenuItem,
 } from '@mui/material';
-import { apiClient, type Client } from '../services/apiClient';
+import { apiClient, type Client, type User } from '../services/apiClient';
 
 interface EditProjectModalProps {
   open: boolean;
@@ -25,6 +25,7 @@ interface EditProjectModalProps {
     name: string;
     description?: string;
     client_id?: number;
+    responsible_id?: number;
     deadline?: string;
   };
 }
@@ -40,10 +41,12 @@ export default function EditProjectModal({
     name: initialData.name,
     description: initialData.description || '',
     client_id: initialData.client_id,
+    responsible_id: initialData.responsible_id,
     deadline: initialData.deadline ? initialData.deadline.split('T')[0] : '',
   });
   
   const [clients, setClients] = useState<Client[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -54,9 +57,11 @@ export default function EditProjectModal({
         name: initialData.name,
         description: initialData.description || '',
         client_id: initialData.client_id,
+        responsible_id: initialData.responsible_id,
         deadline: initialData.deadline ? initialData.deadline.split('T')[0] : '',
       });
       fetchClients();
+      fetchUsers();
     }
   }, [open, initialData]);
 
@@ -66,6 +71,15 @@ export default function EditProjectModal({
       setClients(data);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const data = await apiClient.getUsers();
+      setUsers(data);
+    } catch (err) {
+      console.error('Error al cargar usuarios:', err);
     }
   };
 
@@ -101,6 +115,7 @@ export default function EditProjectModal({
         name: formData.name,
         description: formData.description || undefined,
         client_id: formData.client_id || undefined,
+        responsible_id: formData.responsible_id || undefined,
         deadline: formData.deadline || undefined,
       });
 
@@ -123,6 +138,7 @@ export default function EditProjectModal({
         formData.name !== initialData.name ||
         formData.description !== (initialData.description || '') ||
         formData.client_id !== initialData.client_id ||
+        formData.responsible_id !== initialData.responsible_id ||
         formData.deadline !== (initialData.deadline ? initialData.deadline.split('T')[0] : '');
       
       if (hasChanges) {
@@ -164,6 +180,24 @@ export default function EditProjectModal({
               {clients.map((client) => (
                 <MenuItem key={client.id} value={client.id}>
                   {client.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Responsable</InputLabel>
+            <Select
+              value={formData.responsible_id || ''}
+              onChange={(e) => setFormData({ ...formData, responsible_id: e.target.value ? Number(e.target.value) : undefined })}
+              label="Responsable"
+            >
+              <MenuItem value="">
+                <em>Sin responsable</em>
+              </MenuItem>
+              {users.map((user) => (
+                <MenuItem key={user.id} value={user.id}>
+                  {user.name}
                 </MenuItem>
               ))}
             </Select>

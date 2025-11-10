@@ -271,6 +271,7 @@ export default function CompletedProjectsView() {
               projectName={project.name}
               projectDescription={project.description}
               clientName={project.client_name}
+              responsibleName={project.responsible_name}
               deadline={project.deadline}
               stages={project.stages || []}
               onStageCompleted={fetchProjects}

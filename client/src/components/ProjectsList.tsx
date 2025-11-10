@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { apiClient, type Project, type Stage, type Client } from '../services/apiClient';
+import { apiClient, type Project, type Stage, type Client, type User } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
 import CreateProjectModal from './CreateProjectModal';
 
@@ -31,6 +31,7 @@ type SortOption = 'name' | 'deadline' | 'progress' | 'recent';
 export default function ProjectsList() {
   const [projects, setProjects] = useState<ProjectWithStages[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -38,6 +39,7 @@ export default function ProjectsList() {
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState<string>('');
+  const [selectedResponsible, setSelectedResponsible] = useState<string>('');
   const [dateFilter, setDateFilter] = useState<string>('all'); // all, today, week, month, overdue
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [showFilters, setShowFilters] = useState(false);
@@ -47,12 +49,14 @@ export default function ProjectsList() {
     setError('');
 
     try {
-      const [projectsList, clientsList] = await Promise.all([
+      const [projectsList, clientsList, usersList] = await Promise.all([
         apiClient.getProjects({status: "active"}),
         apiClient.getClients(),
+        apiClient.getUsers(),
       ]);
       
       setClients(clientsList);
+      setUsers(usersList);
       
       // Cargar cada proyecto con sus etapas
       const projectsWithStages = await Promise.all(
@@ -93,6 +97,11 @@ export default function ProjectsList() {
     // Filtro por cliente
     if (selectedClient) {
       filtered = filtered.filter((p) => p.client_id?.toString() === selectedClient);
+    }
+
+    // Filtro por responsable
+    if (selectedResponsible) {
+      filtered = filtered.filter((p) => p.responsible_id?.toString() === selectedResponsible);
     }
 
     // Filtro por fecha
@@ -154,7 +163,7 @@ export default function ProjectsList() {
     });
 
     return filtered;
-  }, [projects, searchTerm, selectedClient, dateFilter, sortBy]);
+  }, [projects, searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy]);
 
   const handleRefresh = () => {
     fetchProjects();
@@ -255,6 +264,26 @@ export default function ProjectsList() {
 
               <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
                 <FormControl fullWidth>
+                  <InputLabel>Responsable</InputLabel>
+                  <Select
+                    value={selectedResponsible}
+                    onChange={(e) => setSelectedResponsible(e.target.value)}
+                    label="Responsable"
+                  >
+                    <MenuItem value="">
+                      <em>Todos los responsables</em>
+                    </MenuItem>
+                    {users.map((user) => (
+                      <MenuItem key={user.id} value={user.id.toString()}>
+                        {user.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
+                <FormControl fullWidth>
                   <InputLabel>Fecha Límite</InputLabel>
                   <Select
                     value={dateFilter}
@@ -307,6 +336,13 @@ export default function ProjectsList() {
                     onDelete={() => setSelectedClient('')}
                   />
                 )}
+                {selectedResponsible && (
+                  <Chip
+                    label={`Responsable: ${users.find(u => u.id.toString() === selectedResponsible)?.name}`}
+                    size="small"
+                    onDelete={() => setSelectedResponsible('')}
+                  />
+                )}
                 {dateFilter !== 'all' && (
                   <Chip
                     label={`Fecha: ${dateFilter}`}
@@ -314,12 +350,13 @@ export default function ProjectsList() {
                     onDelete={() => setDateFilter('all')}
                   />
                 )}
-                {(searchTerm || selectedClient || dateFilter !== 'all') && (
+                {(searchTerm || selectedClient || selectedResponsible || dateFilter !== 'all') && (
                   <Button
                     size="small"
                     onClick={() => {
                       setSearchTerm('');
                       setSelectedClient('');
+                      setSelectedResponsible('');
                       setDateFilter('all');
                     }}
                   >
@@ -367,6 +404,7 @@ export default function ProjectsList() {
               projectName={project.name}
               projectDescription={project.description}
               clientName={project.client_name}
+              responsibleName={project.responsible_name}
               deadline={project.deadline}
               stages={project.stages}
               onStageCompleted={handleRefresh}

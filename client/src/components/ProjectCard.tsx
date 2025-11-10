@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BusinessIcon from '@mui/icons-material/Business';
+import PersonIcon from '@mui/icons-material/Person';
 import type { Stage } from '../services/apiClient';
 import StageInProgressCard from './StageInProgressCard';
 import DeadlineChip from './DeadlineChip';
@@ -19,6 +20,7 @@ interface ProjectCardProps {
   projectName: string;
   projectDescription?: string;
   clientName?: string;
+  responsibleName?: string;
   deadline?: string;
   stages: Stage[];
   onStageCompleted?: () => void;
@@ -29,6 +31,7 @@ export default function ProjectCard({
   projectName,
   projectDescription,
   clientName,
+  responsibleName,
   deadline,
   stages,
 }: ProjectCardProps) {
@@ -86,7 +89,7 @@ export default function ProjectCard({
               </Typography>
             )}
 
-            {/* Cliente y Fecha límite */}
+            {/* Cliente, Responsable y Fecha límite */}
             <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
               {clientName && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
@@ -101,6 +104,22 @@ export default function ProjectCard({
                     }}
                   >
                     {clientName}
+                  </Typography>
+                </Box>
+              )}
+              {responsibleName && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                  <PersonIcon fontSize="small" color="action" sx={{ flexShrink: 0 }} />
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary"
+                    sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {responsibleName}
                   </Typography>
                 </Box>
               )}
