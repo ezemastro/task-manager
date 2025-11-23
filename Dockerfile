@@ -61,11 +61,8 @@ COPY api/migrations ./migrations
 # Copiar el frontend compilado desde el build stage
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# Crear directorio para la base de datos con permisos apropiados
-RUN mkdir -p /app/data && chown -R nodejs:nodejs /app
-
-# Cambiar a usuario no-root
-USER nodejs
+# Cambiar permisos de todos los archivos a nodejs
+RUN chown -R nodejs:nodejs /app
 
 # Exponer el puerto
 EXPOSE 3000
@@ -73,6 +70,10 @@ EXPOSE 3000
 # Variables de entorno por defecto
 ENV NODE_ENV=production
 ENV PORT=3000
+
+# En producción con volúmenes montados, ejecutar como root
+# para evitar problemas de permisos con ./data del host
+# USER nodejs
 
 # Usar dumb-init para manejar señales correctamente
 ENTRYPOINT ["dumb-init", "--"]

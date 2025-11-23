@@ -8,7 +8,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - task-manager-data:/app/data
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -27,7 +27,3 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
-
-volumes:
-  task-manager-data:
-    driver: local
