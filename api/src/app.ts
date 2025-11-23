@@ -28,7 +28,9 @@ app.use('/api/auth', authRouter);
 app.use('/api', apiRouter);
 
 // Servir frontend en producción
-const frontendPath = path.join(__dirname, '..', '..', 'client', 'dist');
+const frontendPath = process.env.NODE_ENV === 'production' 
+  ? path.join('/app', 'client', 'dist')
+  : path.join(__dirname, '..', '..', 'client', 'dist');
 app.use(express.static(frontendPath));
 app.get(/^(?!\/api).*/, (req: Request, res: Response) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
