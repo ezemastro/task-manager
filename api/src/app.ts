@@ -8,6 +8,9 @@ import { authRouter } from './authRouter';
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
+// Confiar en el proxy (Nginx)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({
   origin: true, // En desarrollo permite cualquier origen

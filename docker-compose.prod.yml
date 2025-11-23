@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   task-manager:
-    image: ezemastro/task-manager:latest  # Cambiar por tu usuario de Docker Hub
+    image: ezemastro/task-manager:latest
     container_name: task-manager
     restart: unless-stopped
     ports:
@@ -18,12 +18,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Límites de recursos (opcional)
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    external: true
