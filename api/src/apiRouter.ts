@@ -32,14 +32,28 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 // Initialize database tables
 function initializeDatabase() {
   db.serialize(() => {
+    // Tabla de organizaciones
+    db.run(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Tabla de usuarios
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
         name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE,
+        password_hash TEXT,
         role TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        scopes TEXT DEFAULT '[]',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
       )
     `);
 
@@ -47,10 +61,12 @@ function initializeDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         email TEXT,
         phone TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
       )
     `);
 
@@ -58,14 +74,18 @@ function initializeDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         description TEXT,
         client_id INTEGER,
+        responsible_id INTEGER,
         deadline DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'active',
-        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+        FOREIGN KEY (responsible_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
 
@@ -73,11 +93,13 @@ function initializeDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS stage_templates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         order_number INTEGER NOT NULL,
         default_responsible_id INTEGER,
         estimated_duration_days INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
         FOREIGN KEY (default_responsible_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
@@ -91,6 +113,7 @@ function initializeDatabase() {
         name TEXT NOT NULL,
         responsible_id INTEGER,
         start_date DATETIME,
+        intermediate_date DATETIME,
         estimated_end_date DATETIME,
         completed_date DATETIME,
         order_number INTEGER NOT NULL,
@@ -106,9 +129,12 @@ function initializeDatabase() {
     db.run(`
       CREATE TABLE IF NOT EXISTS tags (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
+        organization_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
         color TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        UNIQUE(organization_id, name)
       )
     `);
 
@@ -128,10 +154,12 @@ function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS comments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         stage_id INTEGER NOT NULL,
+        user_id INTEGER,
         content TEXT NOT NULL,
         author TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (stage_id) REFERENCES stages(id) ON DELETE CASCADE
+        FOREIGN KEY (stage_id) REFERENCES stages(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
 
