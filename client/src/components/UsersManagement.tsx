@@ -111,14 +111,13 @@ export default function UsersManagement() {
               <TableCell>Nombre</TableCell>
               <TableCell>Email</TableCell>
               <TableCell>Rol</TableCell>
-              <TableCell>Fecha de Creación</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={4} align="center">
                   No hay usuarios registrados
                 </TableCell>
               </TableRow>
@@ -139,9 +138,6 @@ export default function UsersManagement() {
                         Sin rol
                       </Typography>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(user.created_at).toLocaleDateString('es-ES')}
                   </TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -248,9 +244,8 @@ function CreateUserModal({ open, onClose, onSuccess }: CreateUserModalProps) {
       newErrors.name = 'El nombre es requerido';
     }
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'El email es requerido';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    // Email es opcional, pero si se proporciona debe ser válido
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Email inválido';
     }
 
@@ -321,13 +316,12 @@ function CreateUserModal({ open, onClose, onSuccess }: CreateUserModalProps) {
 
           <TextField
             fullWidth
-            required
             type="email"
-            label="Email"
+            label="Email (opcional)"
             value={formData.email}
             onChange={handleChange('email')}
             error={!!errors.email}
-            helperText={errors.email || 'Dirección de correo electrónico'}
+            helperText={errors.email || 'Dirección de correo electrónico (opcional)'}
             disabled={loading}
           />
 
@@ -399,9 +393,8 @@ function EditUserModal({ open, onClose, onSuccess, user }: EditUserModalProps) {
       newErrors.name = 'El nombre es requerido';
     }
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'El email es requerido';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    // Email es opcional, pero si se proporciona debe ser válido
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Email inválido';
     }
 
@@ -460,9 +453,8 @@ function EditUserModal({ open, onClose, onSuccess, user }: EditUserModalProps) {
 
           <TextField
             fullWidth
-            required
             type="email"
-            label="Email"
+            label="Email (opcional)"
             value={formData.email}
             onChange={(e) => {
               setFormData({ ...formData, email: e.target.value });
@@ -471,7 +463,7 @@ function EditUserModal({ open, onClose, onSuccess, user }: EditUserModalProps) {
               }
             }}
             error={!!errors.email}
-            helperText={errors.email || 'Dirección de correo electrónico'}
+            helperText={errors.email || 'Dirección de correo electrónico (opcional)'}
             disabled={loading}
           />
 

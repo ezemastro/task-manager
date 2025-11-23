@@ -1,10 +1,14 @@
 import { Router, type Request, type Response } from "express";
 import sqlite3 from 'sqlite3';
+import { authMiddleware } from './middleware';
 
 export const apiRouter = Router();
 
+// Proteger todas las rutas del API con autenticación
+apiRouter.use(authMiddleware);
+
 // Database setup
-const db = new sqlite3.Database('./database.sqlite', (err) => {
+export const db = new sqlite3.Database('./database.sqlite', (err) => {
   if (err) {
     console.error('Error al conectar con la base de datos:', err);
   } else {
@@ -145,7 +149,8 @@ function initializeDatabase() {
 
 // GET all clients
 apiRouter.get('/clients', (req: Request, res: Response) => {
-  db.all('SELECT * FROM clients ORDER BY name', [], (err, rows) => {
+  const organizationId = req.user!.organizationId;
+  db.all('SELECT * FROM clients WHERE organization_id = ? ORDER BY name', [organizationId], (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -173,6 +178,7 @@ apiRouter.get('/clients/:id', (req: Request, res: Response) => {
 // POST create client
 apiRouter.post('/clients', (req: Request, res: Response) => {
   const { name, email, phone } = req.body;
+  const organizationId = req.user!.organizationId;
   
   if (!name) {
     res.status(400).json({ error: 'El nombre del cliente es requerido' });
@@ -180,8 +186,8 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
   }
 
   db.run(
-    'INSERT INTO clients (name, email, phone) VALUES (?, ?, ?)',
-    [name, email, phone],
+    'INSERT INTO clients (organization_id, name, contact_info) VALUES (?, ?, ?)',
+    [organizationId, name, JSON.stringify({ email, phone })],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -235,14 +241,16 @@ apiRouter.delete('/clients/:id', (req: Request, res: Response) => {
 
 // GET all stage templates
 apiRouter.get('/stage-templates', (req: Request, res: Response) => {
+  const organizationId = req.user!.organizationId;
   const sql = `
     SELECT st.*, u.name as default_responsible_name 
     FROM stage_templates st
     LEFT JOIN users u ON st.default_responsible_id = u.id
+    WHERE st.organization_id = ?
     ORDER BY st.order_number
   `;
   
-  db.all(sql, [], (err, rows) => {
+  db.all(sql, [organizationId], (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -277,6 +285,7 @@ apiRouter.get('/stage-templates/:id', (req: Request, res: Response) => {
 // POST create stage template
 apiRouter.post('/stage-templates', (req: Request, res: Response) => {
   const { name, order_number, default_responsible_id, estimated_duration_days } = req.body;
+  const organizationId = req.user!.organizationId;
   
   if (!name || order_number === undefined) {
     res.status(400).json({ error: 'El nombre y el orden son requeridos' });
@@ -284,8 +293,8 @@ apiRouter.post('/stage-templates', (req: Request, res: Response) => {
   }
 
   db.run(
-    'INSERT INTO stage_templates (name, order_number, default_responsible_id, estimated_duration_days) VALUES (?, ?, ?, ?)',
-    [name, order_number, default_responsible_id || null, estimated_duration_days || null],
+    'INSERT INTO stage_templates (organization_id, name, order_number, default_responsible_id, estimated_duration_days) VALUES (?, ?, ?, ?, ?)',
+    [organizationId, name, order_number, default_responsible_id || null, estimated_duration_days || null],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -411,13 +420,14 @@ apiRouter.delete('/stage-templates/:id', (req: Request, res: Response) => {
 // Crear un nuevo proyecto
 apiRouter.post('/projects', (req: Request, res: Response) => {
   const { name, description, client_id, responsible_id, deadline } = req.body;
+  const organizationId = req.user!.organizationId;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre del proyecto es requerido' });
   }
 
-  const sql = 'INSERT INTO projects (name, description, client_id, responsible_id, deadline) VALUES (?, ?, ?, ?, ?)';
-  db.run(sql, [name, description || null, client_id || null, responsible_id || null, deadline || null], function (err) {
+  const sql = 'INSERT INTO projects (organization_id, name, description, client_id, responsible_id, deadline) VALUES (?, ?, ?, ?, ?, ?)';
+  db.run(sql, [organizationId, name, description || null, client_id || null, responsible_id || null, deadline || null], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -478,6 +488,7 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
 // Obtener todos los proyectos con filtros
 apiRouter.get('/projects', (req: Request, res: Response) => {
   const { name, has_completed_stages, has_pending_stages, status } = req.query;
+  const organizationId = req.user!.organizationId;
 
   let sql = `
     SELECT 
@@ -491,9 +502,9 @@ apiRouter.get('/projects', (req: Request, res: Response) => {
     LEFT JOIN clients c ON p.client_id = c.id
     LEFT JOIN users u ON p.responsible_id = u.id
     LEFT JOIN stages s ON p.id = s.project_id
-    WHERE 1=1
+    WHERE p.organization_id = ?
   `;
-  const params: any[] = [];
+  const params: any[] = [organizationId];
 
   if (name) {
     sql += ' AND p.name LIKE ?';
@@ -577,10 +588,11 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
           
           // Obtener últimos 3 comentarios
           const commentsSql = `
-            SELECT id, author, content, created_at
-            FROM comments
-            WHERE stage_id = ?
-            ORDER BY created_at DESC
+            SELECT c.id, c.content, c.created_at, u.name as author, u.id as user_id
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.stage_id = ?
+            ORDER BY c.created_at DESC
             LIMIT 3
           `;
           
@@ -724,9 +736,10 @@ apiRouter.post('/users', (req: Request, res: Response) => {
 // Obtener todos los usuarios
 apiRouter.get('/users', (req: Request, res: Response) => {
   const { name, role } = req.query;
+  const organizationId = req.user!.organizationId;
   
-  let sql = 'SELECT * FROM users WHERE 1=1';
-  const params: any[] = [];
+  let sql = 'SELECT id, name, email, role FROM users WHERE organization_id = ?';
+  const params: any[] = [organizationId];
 
   if (name) {
     sql += ' AND name LIKE ?';
@@ -888,6 +901,8 @@ apiRouter.get('/stages', (req: Request, res: Response) => {
     estimated_end_date_to 
   } = req.query;
 
+  const organizationId = req.user!.organizationId;
+
   let sql = `
     SELECT 
       s.*,
@@ -901,9 +916,9 @@ apiRouter.get('/stages', (req: Request, res: Response) => {
     INNER JOIN projects p ON s.project_id = p.id
     LEFT JOIN users u ON s.responsible_id = u.id
     LEFT JOIN clients c ON p.client_id = c.id
-    WHERE p.status = 'active'
+    WHERE p.organization_id = ? AND p.status = 'active'
   `;
-  const params: any[] = [];
+  const params: any[] = [organizationId];
 
   if (project_id) {
     sql += ' AND s.project_id = ?';
@@ -967,10 +982,11 @@ apiRouter.get('/stages', (req: Request, res: Response) => {
         `;
         
         const commentsSql = `
-          SELECT id, author, content, created_at
-          FROM comments
-          WHERE stage_id = ?
-          ORDER BY created_at DESC
+          SELECT c.id, c.content, c.created_at, u.name as author, u.id as user_id
+          FROM comments c
+          LEFT JOIN users u ON c.user_id = u.id
+          WHERE c.stage_id = ?
+          ORDER BY c.created_at DESC
           LIMIT 3
         `;
         
@@ -1392,10 +1408,11 @@ apiRouter.delete('/tags/:id', (req: Request, res: Response) => {
 
 // Añadir comentario a una etapa
 apiRouter.post('/comments', (req: Request, res: Response) => {
-  const { stage_id, content, author } = req.body;
+  const { stage_id, content } = req.body;
+  const userId = req.user!.userId;
 
-  if (!stage_id || !content || !author) {
-    return res.status(400).json({ error: 'stage_id, content y author son requeridos' });
+  if (!stage_id || !content) {
+    return res.status(400).json({ error: 'stage_id y content son requeridos' });
   }
 
   // Verificar que la etapa existe
@@ -1407,17 +1424,22 @@ apiRouter.post('/comments', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Etapa no encontrada' });
     }
 
-    const sql = 'INSERT INTO comments (stage_id, content, author) VALUES (?, ?, ?)';
-    db.run(sql, [stage_id, content, author], function (err) {
+    const sql = 'INSERT INTO comments (stage_id, user_id, content) VALUES (?, ?, ?)';
+    db.run(sql, [stage_id, userId, content], function (err) {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      res.status(201).json({
-        id: this.lastID,
-        stage_id,
-        content,
-        author,
-        message: 'Comentario añadido exitosamente'
+      
+      // Obtener el nombre del usuario para devolverlo
+      db.get('SELECT name FROM users WHERE id = ?', [userId], (err, user: any) => {
+        res.status(201).json({
+          id: this.lastID,
+          stage_id,
+          content,
+          user_id: userId,
+          author: user?.name || 'Usuario',
+          message: 'Comentario añadido exitosamente'
+        });
       });
     });
   });
@@ -1427,7 +1449,13 @@ apiRouter.post('/comments', (req: Request, res: Response) => {
 apiRouter.get('/stages/:stageId/comments', (req: Request, res: Response) => {
   const { stageId } = req.params;
 
-  const sql = 'SELECT * FROM comments WHERE stage_id = ? ORDER BY created_at DESC';
+  const sql = `
+    SELECT c.*, u.name as author
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.stage_id = ?
+    ORDER BY c.created_at DESC
+  `;
   db.all(sql, [stageId], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
@@ -1441,9 +1469,11 @@ apiRouter.get('/comments', (req: Request, res: Response) => {
   const sql = `
     SELECT 
       c.*,
+      u.name as author,
       s.name as stage_name,
       p.name as project_name
     FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
     INNER JOIN stages s ON c.stage_id = s.id
     INNER JOIN projects p ON s.project_id = p.id
     ORDER BY c.created_at DESC

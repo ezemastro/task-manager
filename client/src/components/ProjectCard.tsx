@@ -48,77 +48,76 @@ export default function ProjectCard({
       elevation={2} 
       sx={{ 
         position: 'relative',
-        maxWidth: 450,
         width: '100%',
         height: 'fit-content',
       }}
     >
       <CardContent sx={{ pb: 2, '&:last-child': { pb: 2 } }}>
-        {/* Header compacto */}
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-          <Box sx={{ flexGrow: 1, pr: 1, minWidth: 0 }}>
-            <Typography 
-              variant="h4" 
-              component="h2" 
-              sx={{ 
-                mb: 0.5, 
-                lineHeight: 1.3,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {projectName}
-            </Typography>
-            
-            {projectDescription && (
+        {/* Header */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 2 }}>
+          {/* Info del proyecto */}
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
               <Typography 
-                variant="body2" 
-                color="text.secondary" 
+                variant="h5" 
+                component="h2" 
                 sx={{ 
-                  mb: 1,
+                  lineHeight: 1.3,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  lineHeight: 1.4,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 1,
                 }}
               >
-                {projectDescription}
+                {projectName}
               </Typography>
-            )}
-
-            {/* Cliente, Responsable y Fecha límite */}
-            <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
+              
+              {/* Progreso inline */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {completedStages}/{totalStages}
+                </Typography>
+                <Box sx={{ width: 60, position: 'relative' }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={progress} 
+                    sx={{ height: 6, borderRadius: 3 }}
+                  />
+                </Box>
+                <Typography variant="caption" fontWeight="bold" color="text.secondary" sx={{ minWidth: 35 }}>
+                  {Math.round(progress)}%
+                </Typography>
+              </Box>
+            </Stack>
+            
+            {/* Metadata inline */}
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+              {projectDescription && (
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 300,
+                  }}
+                >
+                  {projectDescription}
+                </Typography>
+              )}
               {clientName && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-                  <BusinessIcon fontSize="small" color="action" sx={{ flexShrink: 0 }} />
-                  <Typography 
-                    variant="caption" 
-                    color="text.secondary"
-                    sx={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                  <BusinessIcon fontSize="small" color="action" />
+                  <Typography variant="caption" color="text.secondary">
                     {clientName}
                   </Typography>
                 </Box>
               )}
               {responsibleName && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-                  <PersonIcon fontSize="small" color="action" sx={{ flexShrink: 0 }} />
-                  <Typography 
-                    variant="caption" 
-                    color="text.secondary"
-                    sx={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                  <PersonIcon fontSize="small" color="action" />
+                  <Typography variant="caption" color="text.secondary">
                     {responsibleName}
                   </Typography>
                 </Box>
@@ -140,49 +139,34 @@ export default function ProjectCard({
             color="primary"
             size="small"
             aria-label="Ver detalles del proyecto"
+            sx={{ flexShrink: 0 }}
           >
             <OpenInNewIcon />
           </IconButton>
-        </Stack>
-
-        {/* Barra de progreso compacta */}
-        <Box sx={{ mb: 1.5 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              Progreso: {completedStages}/{totalStages} etapas
-            </Typography>
-            <Typography variant="caption" fontWeight="bold" color="text.secondary">
-              {Math.round(progress)}%
-            </Typography>
-          </Stack>
-          <LinearProgress 
-            variant="determinate" 
-            value={progress} 
-            sx={{ height: 6, borderRadius: 3 }}
-          />
         </Box>
 
-        {/* Etapas en proceso */}
+        {/* Etapas en proceso - Layout horizontal compacto */}
         {stagesInProgress.length > 0 ? (
-          <Box>
-            <Stack spacing={1.5} sx={{ mt: 1 }}>
+          <Box sx={{ mt: 2 }}>
+            <Stack spacing={1}>
               {stagesInProgress.map((stage) => (
                 <StageInProgressCard 
                   key={stage.id} 
                   stage={stage}
                   showStageNumber={true}
+                  compact={true}
                 />
               ))}
             </Stack>
           </Box>
         ) : stages.some(s => !s.is_completed) ? (
-          <Box sx={{ bgcolor: 'info.lighter', p: 1.5, borderRadius: 1, mt: 1 }}>
+          <Box sx={{ bgcolor: 'info.lighter', px: 2, py: 0.75, borderRadius: 1, mt: 2 }}>
             <Typography variant="body2" color="info.dark" fontWeight="bold">
               ⏸ Etapas pendientes de iniciar
             </Typography>
           </Box>
         ) : (
-          <Box sx={{ bgcolor: 'success.light', p: 1.5, borderRadius: 1, mt: 1 }}>
+          <Box sx={{ bgcolor: 'success.light', px: 2, py: 0.75, borderRadius: 1, mt: 2 }}>
             <Typography variant="body2" color="success.dark" fontWeight="bold">
               ✓ Proyecto Completado
             </Typography>

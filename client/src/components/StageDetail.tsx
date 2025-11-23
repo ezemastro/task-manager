@@ -56,10 +56,6 @@ export default function StageDetail() {
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#1976d2');
   const [commentContent, setCommentContent] = useState('');
-  const [commentAuthor, setCommentAuthor] = useState(() => {
-    // Obtener el nombre del autor desde localStorage como valor inicial
-    return localStorage.getItem('commentAuthor') || '';
-  });
 
   // Estados para edición de comentarios
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
@@ -231,15 +227,11 @@ export default function StageDetail() {
   };
 
   const handleAddComment = async () => {
-    if (!id || !commentContent.trim() || !commentAuthor.trim()) return;
-    
-    // Guardar el nombre del autor en localStorage para futuros comentarios
-    localStorage.setItem('commentAuthor', commentAuthor);
+    if (!id || !commentContent.trim()) return;
     
     const commentData: CreateCommentRequest = {
       stage_id: Number(id),
       content: commentContent,
-      author: commentAuthor,
     };
 
     try {
@@ -907,13 +899,6 @@ export default function StageDetail() {
             <Stack spacing={2}>
               <TextField
                 fullWidth
-                label="Tu nombre"
-                value={commentAuthor}
-                onChange={(e) => setCommentAuthor(e.target.value)}
-                size="small"
-              />
-              <TextField
-                fullWidth
                 multiline
                 rows={3}
                 label="Comentario"
@@ -923,7 +908,7 @@ export default function StageDetail() {
               <Button
                 variant="contained"
                 onClick={handleAddComment}
-                disabled={!commentContent.trim() || !commentAuthor.trim()}
+                disabled={!commentContent.trim()}
               >
                 Publicar Comentario
               </Button>

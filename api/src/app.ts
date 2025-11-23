@@ -1,16 +1,25 @@
 import express, { type Request, type Response } from 'express';
 import path from 'path';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { apiRouter } from './apiRouter';
+import { authRouter } from './authRouter';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true, // En desarrollo permite cualquier origen
+  credentials: true // Permite enviar cookies
+}));
 app.use(express.json());
+app.use(cookieParser());
 
-// Rutas API
+// Rutas de autenticación (públicas)
+app.use('/api/auth', authRouter);
+
+// Rutas API (protegidas)
 app.use('/api', apiRouter);
 
 // Servir frontend en producción

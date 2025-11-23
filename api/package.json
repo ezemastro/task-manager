@@ -8,18 +8,24 @@
   "main": "src/app.ts",
   "scripts": {
     "dev": "ts-node src/app.ts",
-    "start": "node --loader ts-node/esm src/app.ts",
+    "start": "ts-node src/app.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.7.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"

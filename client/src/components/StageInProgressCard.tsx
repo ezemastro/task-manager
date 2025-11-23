@@ -15,16 +15,143 @@ interface StageInProgressCardProps {
   showProjectName?: boolean;
   showStageNumber?: boolean;
   variant?: 'in-progress' | 'pending';
+  compact?: boolean;
 }
 
 export default function StageInProgressCard({ 
   stage, 
   showProjectName = false,
   showStageNumber = true,
-  variant = 'in-progress'
+  variant = 'in-progress',
+  compact = false,
 }: StageInProgressCardProps) {
   const isInProgress = variant === 'in-progress';
   
+  if (compact) {
+    // Layout compacto horizontal con comentarios debajo
+    return (
+      <Box 
+        sx={{ 
+          bgcolor: 'action.hover', 
+          borderRadius: 1,
+        }}
+      >
+        {/* Fila principal */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1 }}>
+          {/* Nombre de la etapa */}
+          <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="caption" color="text.secondary" fontWeight="bold" sx={{ flexShrink: 0 }}>
+                {isInProgress ? 'EN PROCESO' : 'PENDIENTE'}
+                {showStageNumber && stage.order_number ? ` - ETAPA ${stage.order_number}` : ''}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                fontWeight="bold" 
+                sx={{ 
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {stage.name}
+              </Typography>
+            </Stack>
+          </Box>
+          
+          {/* Info rápida */}
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+            {/* Etiquetas */}
+            {stage.tags && stage.tags.length > 0 && (
+              <Stack direction="row" spacing={0.5}>
+                {stage.tags.slice(0, 2).map((tag) => (
+                  <Chip
+                    key={tag.id}
+                    label={tag.name}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.7rem',
+                      bgcolor: tag.color || undefined,
+                      color: tag.color ? '#fff' : undefined,
+                    }}
+                  />
+                ))}
+                {stage.tags.length > 2 && (
+                  <Chip
+                    label={`+${stage.tags.length - 2}`}
+                    size="small"
+                    sx={{ height: 20, fontSize: '0.7rem' }}
+                  />
+                )}
+              </Stack>
+            )}
+            
+            {/* Responsable */}
+            {stage.responsible_id && (
+              <Chip 
+                label={stage.responsible_name || 'Sin responsable'}
+                size="small"
+                sx={{ height: 22, fontSize: '0.75rem' }}
+              />
+            )}
+            
+            {/* Fecha estimada */}
+            {stage.estimated_end_date && (
+              <DeadlineChip
+                date={stage.estimated_end_date}
+                isCompleted={stage.is_completed}
+                size="small"
+                showIcon={true}
+                label={new Date(stage.estimated_end_date).toLocaleDateString('es-ES')}
+              />
+            )}
+            
+            <IconButton
+              component={RouterLink}
+              to={`/stages/${stage.id}`}
+              color="primary"
+              size="small"
+              aria-label="Ver detalles de la etapa"
+            >
+              <OpenInNewIcon fontSize="small" />
+            </IconButton>
+          </Stack>
+        </Box>
+
+        {/* Comentarios recientes */}
+        {stage.recent_comments && stage.recent_comments.length > 0 && (
+          <Box sx={{ px: 2, pb: 1, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Stack spacing={0.75}>
+              {stage.recent_comments.slice(0, 3).map((comment, idx) => (
+                <Box key={comment.id || idx}>
+                  <Typography variant="caption" display="block" sx={{ lineHeight: 1.4 }}>
+                    <strong style={{ color: '#666' }}>{comment.author}:</strong>{' '}
+                    <span style={{ color: '#333' }}>{comment.content}</span>
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                    {new Date(comment.created_at).toLocaleDateString('es-ES', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Typography>
+                </Box>
+              ))}
+              {stage.comments_count && stage.comments_count > 3 && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  +{stage.comments_count - 3} comentarios más
+                </Typography>
+              )}
+            </Stack>
+          </Box>
+        )}
+      </Box>
+    );
+  }
+  
+  // Layout normal vertical
   return (
     <Box 
       sx={{ 

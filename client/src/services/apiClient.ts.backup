@@ -180,6 +180,7 @@ export interface UpdateTagRequest {
 export interface CreateCommentRequest {
   stage_id: number;
   content: string;
+  author: string;
 }
 
 export interface AddTagToStageRequest {
@@ -215,10 +216,6 @@ export interface UserFilters {
 export interface Organization {
   id: number;
   name: string;
-  userId?: number;
-  userName?: string;
-  userEmail?: string;
-  message?: string;
 }
 
 export interface AuthUser {
@@ -263,13 +260,8 @@ class ApiClient {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          // Solo redirigir a login si NO es un error en la ruta de login
-          // (para evitar redirección al ingresar contraseña incorrecta)
-          const isLoginEndpoint = error.config?.url?.includes('/auth/login');
-          if (!isLoginEndpoint) {
-            // Token expirado o inválido en rutas protegidas
-            window.location.href = '/login';
-          }
+          // Token expirado o inválido
+          window.location.href = '/login';
         }
         const message = error.response?.data?.error || error.message || 'Error desconocido';
         throw new Error(message);
@@ -286,11 +278,6 @@ class ApiClient {
 
   async createOrganization(name: string): Promise<Organization> {
     const { data } = await this.api.post('/auth/organizations', { name });
-    return data;
-  }
-
-  async updateOrganization(organizationId: number, name: string): Promise<Organization> {
-    const { data } = await this.api.put(`/auth/organizations/${organizationId}`, { name });
     return data;
   }
 
@@ -330,240 +317,271 @@ class ApiClient {
 
   async getProjects(filters?: ProjectFilters): Promise<Project[]> {
     const query = filters ? this.buildQueryString(filters as Record<string, string | number | boolean | undefined>) : '';
-    const { data } = await this.api.get<Project[]>(`/projects${query}`);
-    return data;
+    return this.request<Project[]>(`/projects${query}`);
   }
 
   async getProject(id: number): Promise<Project & { stages: Stage[] }> {
-    const { data } = await this.api.get<Project & { stages: Stage[] }>(`/projects/${id}`);
-    return data;
+    return this.request<Project & { stages: Stage[] }>(`/projects/${id}`);
   }
 
-  async createProject(requestData: CreateProjectRequest): Promise<{ id: number; message: string } & CreateProjectRequest> {
-    const { data } = await this.api.post(`/projects`, requestData);
-    return data;
+  async createProject(data: CreateProjectRequest): Promise<{ id: number; message: string } & CreateProjectRequest> {
+    return this.request(`/projects`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateProject(id: number, requestData: UpdateProjectRequest): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/projects/${id}`, requestData);
-    return data;
+  async updateProject(id: number, data: UpdateProjectRequest): Promise<{ message: string }> {
+    return this.request(`/projects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteProject(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/projects/${id}`);
-    return data;
+    return this.request(`/projects/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== STAGES ====================
 
   async getStages(filters?: StageFilters): Promise<Stage[]> {
     const query = filters ? this.buildQueryString(filters as Record<string, string | number | boolean | undefined>) : '';
-    const { data } = await this.api.get<Stage[]>(`/stages${query}`);
-    return data;
+    return this.request<Stage[]>(`/stages${query}`);
   }
 
   async getStage(id: number): Promise<StageDetail> {
-    const { data } = await this.api.get<StageDetail>(`/stages/${id}`);
-    return data;
+    return this.request<StageDetail>(`/stages/${id}`);
   }
 
-  async createStage(requestData: CreateStageRequest): Promise<{ id: number; message: string } & CreateStageRequest & { order_number: number }> {
-    const { data } = await this.api.post(`/stages`, requestData);
-    return data;
+  async createStage(data: CreateStageRequest): Promise<{ id: number; message: string } & CreateStageRequest & { order_number: number }> {
+    return this.request(`/stages`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateStage(id: number, requestData: UpdateStageRequest): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/stages/${id}`, requestData);
-    return data;
+  async updateStage(id: number, data: UpdateStageRequest): Promise<{ message: string }> {
+    return this.request(`/stages/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async completeStage(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/stages/${id}/complete`);
-    return data;
+    return this.request(`/stages/${id}/complete`, {
+      method: 'PUT',
+    });
   }
 
   async uncompleteStage(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/stages/${id}/uncomplete`);
-    return data;
+    return this.request(`/stages/${id}/uncomplete`, {
+      method: 'PUT',
+    });
   }
 
   async startStage(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/stages/${id}/start`);
-    return data;
+    return this.request(`/stages/${id}/start`, {
+      method: 'PUT',
+    });
   }
 
   async deleteStage(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/stages/${id}`);
-    return data;
+    return this.request(`/stages/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   async reorderStages(stageOrders: Array<{ id: number; order_number: number }>): Promise<{ message: string }> {
-    const { data } = await this.api.put('/stages/reorder', { stages: stageOrders });
-    return data;
+    return this.request('/stages/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ stages: stageOrders }),
+    });
   }
 
-  async addTagToStage(stageId: number, requestData: AddTagToStageRequest): Promise<{ message: string }> {
-    const { data } = await this.api.post(`/stages/${stageId}/tags`, requestData);
-    return data;
+  async addTagToStage(stageId: number, data: AddTagToStageRequest): Promise<{ message: string }> {
+    return this.request(`/stages/${stageId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   async removeTagFromStage(stageId: number, tagId: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/stages/${stageId}/tags/${tagId}`);
-    return data;
+    return this.request(`/stages/${stageId}/tags/${tagId}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== TAGS ====================
 
   async getTags(): Promise<Tag[]> {
-    const { data } = await this.api.get<Tag[]>('/tags');
-    return data;
+    return this.request<Tag[]>('/tags');
   }
 
   async getTag(id: number): Promise<Tag> {
-    const { data } = await this.api.get<Tag>(`/tags/${id}`);
-    return data;
+    return this.request<Tag>(`/tags/${id}`);
   }
 
-  async createTag(requestData: CreateTagRequest): Promise<{ id: number; message: string } & CreateTagRequest> {
-    const { data } = await this.api.post(`/tags`, requestData);
-    return data;
+  async createTag(data: CreateTagRequest): Promise<{ id: number; message: string } & CreateTagRequest> {
+    return this.request(`/tags`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateTag(id: number, requestData: UpdateTagRequest): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/tags/${id}`, requestData);
-    return data;
+  async updateTag(id: number, data: UpdateTagRequest): Promise<{ message: string }> {
+    return this.request(`/tags/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteTag(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/tags/${id}`);
-    return data;
+    return this.request(`/tags/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== USERS ====================
 
   async getUsers(filters?: UserFilters): Promise<User[]> {
     const query = filters ? this.buildQueryString(filters as Record<string, string | number | boolean | undefined>) : '';
-    const { data } = await this.api.get<User[]>(`/users${query}`);
-    return data;
+    return this.request<User[]>(`/users${query}`);
   }
 
   async getUser(id: number): Promise<User> {
-    const { data } = await this.api.get<User>(`/users/${id}`);
-    return data;
+    return this.request<User>(`/users/${id}`);
   }
 
-  async createUser(requestData: CreateUserRequest): Promise<{ id: number; message: string } & CreateUserRequest> {
-    const { data } = await this.api.post(`/users`, requestData);
-    return data;
+  async createUser(data: CreateUserRequest): Promise<{ id: number; message: string } & CreateUserRequest> {
+    return this.request(`/users`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateUser(id: number, requestData: UpdateUserRequest): Promise<{ message: string }> {
-    const { data } = await this.api.put(`/users/${id}`, requestData);
-    return data;
+  async updateUser(id: number, data: UpdateUserRequest): Promise<{ message: string }> {
+    return this.request(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteUser(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/users/${id}`);
-    return data;
+    return this.request(`/users/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== COMMENTS ====================
 
   async getComments(): Promise<Comment[]> {
-    const { data } = await this.api.get<Comment[]>('/comments');
-    return data;
+    return this.request<Comment[]>('/comments');
   }
 
   async getStageComments(stageId: number): Promise<Comment[]> {
-    const { data } = await this.api.get<Comment[]>(`/stages/${stageId}/comments`);
-    return data;
+    return this.request<Comment[]>(`/stages/${stageId}/comments`);
   }
 
-  async createComment(requestData: CreateCommentRequest): Promise<{ id: number; message: string } & CreateCommentRequest> {
-    const { data } = await this.api.post(`/comments`, requestData);
-    return data;
+  async createComment(data: CreateCommentRequest): Promise<{ id: number; message: string } & CreateCommentRequest> {
+    return this.request(`/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateComment(id: number, requestData: { content: string }): Promise<{ id: number; content: string; message: string }> {
-    const { data } = await this.api.put(`/comments/${id}`, requestData);
-    return data;
+  async updateComment(id: number, data: { content: string }): Promise<{ id: number; content: string; message: string }> {
+    return this.request(`/comments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteComment(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/comments/${id}`);
-    return data;
+    return this.request(`/comments/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== CLIENTS ====================
 
   async getClients(): Promise<Client[]> {
-    const { data } = await this.api.get<Client[]>('/clients');
-    return data;
+    return this.request<Client[]>('/clients');
   }
 
   async getClient(id: number): Promise<Client> {
-    const { data } = await this.api.get<Client>(`/clients/${id}`);
-    return data;
+    return this.request<Client>(`/clients/${id}`);
   }
 
-  async createClient(requestData: { name: string; email?: string; phone?: string }): Promise<Client & { message: string }> {
-    const { data } = await this.api.post(`/clients`, requestData);
-    return data;
+  async createClient(data: { name: string; email?: string; phone?: string }): Promise<Client & { message: string }> {
+    return this.request(`/clients`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateClient(id: number, requestData: { name?: string; email?: string; phone?: string }): Promise<Client> {
-    const { data } = await this.api.put(`/clients/${id}`, requestData);
-    return data;
+  async updateClient(id: number, data: { name?: string; email?: string; phone?: string }): Promise<Client> {
+    return this.request(`/clients/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteClient(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/clients/${id}`);
-    return data;
+    return this.request(`/clients/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // ==================== STAGE TEMPLATES ====================
 
   async getStageTemplates(): Promise<StageTemplate[]> {
-    const { data } = await this.api.get<StageTemplate[]>('/stage-templates');
-    return data;
+    return this.request<StageTemplate[]>('/stage-templates');
   }
 
   async getStageTemplate(id: number): Promise<StageTemplate> {
-    const { data } = await this.api.get<StageTemplate>(`/stage-templates/${id}`);
-    return data;
+    return this.request<StageTemplate>(`/stage-templates/${id}`);
   }
 
-  async createStageTemplate(requestData: {
+  async createStageTemplate(data: {
     name: string;
     order_number: number;
     default_responsible_id?: number | null;
     estimated_duration_days?: number | null;
   }): Promise<StageTemplate & { message: string }> {
-    const { data } = await this.api.post(`/stage-templates`, requestData);
-    return data;
+    return this.request(`/stage-templates`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   async updateStageTemplate(
     id: number,
-    requestData: {
+    data: {
       name?: string;
       order_number?: number;
       default_responsible_id?: number | null;
       estimated_duration_days?: number | null;
     }
   ): Promise<StageTemplate> {
-    const { data } = await this.api.put(`/stage-templates/${id}`, requestData);
-    return data;
+    return this.request(`/stage-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteStageTemplate(id: number): Promise<{ message: string }> {
-    const { data } = await this.api.delete(`/stage-templates/${id}`);
-    return data;
+    return this.request(`/stage-templates/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   async reorderStageTemplates(templateOrders: Array<{ id: number; order_number: number }>): Promise<{ message: string }> {
-    const { data } = await this.api.put('/stage-templates/reorder', { templates: templateOrders });
-    return data;
+    return this.request('/stage-templates/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ templates: templateOrders }),
+    });
   }
 }
 

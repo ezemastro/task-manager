@@ -207,9 +207,6 @@ export default function ProjectsList() {
           >
             {showFilters ? 'Ocultar' : 'Mostrar'} Filtros
           </Button>
-          <Button variant="outlined" onClick={handleRefresh}>
-            Actualizar
-          </Button>
           <Button variant="contained" onClick={() => setShowCreateProject(true)}>
             + Nueva Obra
           </Button>
@@ -383,20 +380,7 @@ export default function ProjectsList() {
             : 'No se encontraron proyectos con los filtros aplicados.'}
         </Alert>
       ) : (
-        <Box 
-          sx={{ 
-            columnCount: {
-              xs: 1,
-              sm: 2,
-              lg: 3,
-            },
-            columnGap: 1,
-            '& > *': {
-              breakInside: 'avoid',
-              marginBottom: 1.5,
-            }
-          }}
-        >
+        <Stack spacing={2}>
           {filteredAndSortedProjects.map((project) => (
             <ProjectCard
               key={project.id}
@@ -410,7 +394,7 @@ export default function ProjectsList() {
               onStageCompleted={handleRefresh}
             />
           ))}
-        </Box>
+        </Stack>
       )}
 
       <CreateProjectModal
