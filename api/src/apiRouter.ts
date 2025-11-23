@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import sqlite3 from 'sqlite3';
+import path from 'path';
+import fs from 'fs';
 import { authMiddleware } from './middleware';
 
 export const apiRouter = Router();
@@ -7,8 +9,18 @@ export const apiRouter = Router();
 // Proteger todas las rutas del API con autenticación
 apiRouter.use(authMiddleware);
 
-// Database setup
-export const db = new sqlite3.Database('./database.sqlite', (err) => {
+// Database setup - usar directorio de datos si existe (Docker), sino usar raíz
+const dataDir = process.env.DB_PATH || (fs.existsSync('/app/data') ? '/app/data' : '.');
+const dbPath = path.join(dataDir, 'database.sqlite');
+
+// Crear directorio si no existe
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+console.log('Ruta de base de datos:', dbPath);
+
+export const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Error al conectar con la base de datos:', err);
   } else {

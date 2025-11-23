@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  task-manager:
+    image: ezemastro/task-manager:latest  # Cambiar por tu usuario de Docker Hub
+    container_name: task-manager
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - task-manager-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Límites de recursos (opcional)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  task-manager-data:
+    driver: local

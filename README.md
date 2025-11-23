@@ -1,6 +1,36 @@
 # Sistema de Gestión de Proyectos de Construcción
 
-Sistema full-stack para la gestión de proyectos de obras de construcción con etapas secuenciales, usuarios, tags y comentarios.
+Sistema full-stack para la gestión de proyectos de obras de construcción con etapas secuenciales, usuarios, tags y comentarios. Con soporte para multi-tenancy, autenticación JWT y despliegue en Docker.
+
+## 🐳 Despliegue con Docker
+
+### Opción 1: Construir localmente (si tienes Docker)
+
+```bash
+# Editar archivos con tu usuario de Docker Hub
+sed -i "s/tu-usuario/TU-USUARIO/g" docker-push.sh docker-update.sh docker-compose.prod.yml Makefile
+
+# Construir y publicar
+make build
+make push
+```
+
+### Opción 2: Build automático con GitHub Actions
+
+1. Configura secrets en GitHub:
+   - `DOCKER_USERNAME`: tu usuario de Docker Hub
+   - `DOCKER_PASSWORD`: token de Docker Hub
+2. Push a GitHub → construye automáticamente
+3. Descarga en tu servidor: `docker pull tu-usuario/task-manager:latest`
+
+### En tu Servidor VPS
+
+```bash
+docker pull tu-usuario/task-manager:latest
+docker run -d -p 3000:3000 -v task-manager-data:/app/data tu-usuario/task-manager:latest
+```
+
+📖 **Ver [DEPLOYMENT.md](./DEPLOYMENT.md) para guía completa**
 
 ## 🚀 Stack Tecnológico
 
@@ -266,7 +296,36 @@ Modal para crear nuevas etapas.
 - Valida que se seleccione un usuario
 - Calcula automáticamente el `order_number`
 
-## 🔧 Instalación y Uso
+## 🐳 Despliegue con Docker (Recomendado)
+
+### Inicio Rápido
+
+```bash
+# Construir imagen
+make build
+
+# Publicar a Docker Hub
+make push
+
+# O ambos en un comando
+make deploy
+```
+
+Ver documentación completa:
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Guía completa de despliegue en VPS
+- **[DOCKER.md](./DOCKER.md)** - Referencia rápida de Docker
+
+### Usando Docker Compose
+
+```bash
+# Desarrollo
+docker-compose up -d
+
+# Producción (en el servidor)
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+## 🔧 Instalación y Uso (Desarrollo Local)
 
 ### 1. Instalar dependencias
 

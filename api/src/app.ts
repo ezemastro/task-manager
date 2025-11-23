@@ -16,6 +16,11 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// Health check endpoint (para Docker)
+app.get('/api/health', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Rutas de autenticación (públicas)
 app.use('/api/auth', authRouter);
 
