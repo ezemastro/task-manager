@@ -7,7 +7,7 @@ WORKDIR /app/client
 COPY client/package*.json ./
 
 # Instalar dependencias del cliente
-RUN npm ci
+RUN npm install --production=false
 
 # Copiar código fuente del cliente
 COPY client/ ./
@@ -24,7 +24,7 @@ WORKDIR /app/api
 COPY api/package*.json ./
 
 # Instalar dependencias de la API (incluyendo devDependencies para compilar TypeScript)
-RUN npm ci
+RUN npm install --production=false
 
 # Copiar código fuente de la API
 COPY api/ ./
@@ -47,7 +47,7 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 COPY api/package*.json ./
 
 # Instalar solo dependencias de producción
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production && npm cache clean --force
 
 # Copiar código compilado de la API desde el build stage
 COPY --from=api-builder /app/api/dist ./dist
