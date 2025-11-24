@@ -245,7 +245,7 @@ function CreateUserModal({ open, onClose, onSuccess }: CreateUserModalProps) {
     }
 
     // Email es opcional, pero si se proporciona debe ser válido
-    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (formData.email && formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Email inválido';
     }
 
@@ -394,7 +394,7 @@ function EditUserModal({ open, onClose, onSuccess, user }: EditUserModalProps) {
     }
 
     // Email es opcional, pero si se proporciona debe ser válido
-    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (formData.email && formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Email inválido';
     }
 

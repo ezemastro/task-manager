@@ -750,13 +750,17 @@ apiRouter.delete('/projects/:id', (req: Request, res: Response) => {
 // Crear un nuevo usuario
 apiRouter.post('/users', (req: Request, res: Response) => {
   const { name, email, role } = req.body;
+  const organizationId = req.user!.organizationId;
 
-  if (!name || !email) {
-    return res.status(400).json({ error: 'El nombre y email son requeridos' });
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'El nombre es requerido' });
   }
 
-  const sql = 'INSERT INTO users (name, email, role) VALUES (?, ?, ?)';
-  db.run(sql, [name, email, role || null], function (err) {
+  // Email es opcional, pero si se proporciona no debe estar vacío
+  const emailValue = email && email.trim() ? email.trim() : null;
+
+  const sql = 'INSERT INTO users (organization_id, name, email, role) VALUES (?, ?, ?, ?)';
+  db.run(sql, [organizationId, name.trim(), emailValue, role?.trim() || null], function (err) {
     if (err) {
       if (err.message.includes('UNIQUE constraint failed')) {
         return res.status(400).json({ error: 'Ya existe un usuario con ese email' });
@@ -765,9 +769,9 @@ apiRouter.post('/users', (req: Request, res: Response) => {
     }
     res.status(201).json({
       id: this.lastID,
-      name,
-      email,
-      role,
+      name: name.trim(),
+      email: emailValue,
+      role: role?.trim() || null,
       message: 'Usuario creado exitosamente'
     });
   });
