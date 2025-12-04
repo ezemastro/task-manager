@@ -170,6 +170,18 @@ export default function StageDetail() {
     }
   };
 
+  const handleUnstartStage = async () => {
+    if (!id) return;
+    
+    try {
+      await apiClient.unstartStage(Number(id));
+      await fetchStageDetail();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al volver etapa a no iniciada';
+      setError(message);
+    }
+  };
+
   const handleDeleteStage = async () => {
     if (!id) return;
     
@@ -512,6 +524,15 @@ export default function StageDetail() {
         >
           Eliminar
         </Button>
+        {stage.start_date && !stage.is_completed && (
+          <Button
+            variant="outlined"
+            color="info"
+            onClick={handleUnstartStage}
+          >
+            ← Volver a No Iniciada
+          </Button>
+        )}
         {!stage.is_completed ? (
           <Button
             variant="contained"

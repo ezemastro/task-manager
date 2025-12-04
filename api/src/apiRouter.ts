@@ -1169,6 +1169,22 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
   });
 });
 
+// Volver una etapa a estado "no iniciada"
+apiRouter.put('/stages/:id/unstart', (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const sql = 'UPDATE stages SET start_date = NULL WHERE id = ? AND start_date IS NOT NULL AND is_completed = 0';
+  db.run(sql, [id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(400).json({ error: 'La etapa no está iniciada, ya está completada o no existe' });
+    }
+    res.json({ message: 'Etapa devuelta a estado no iniciada exitosamente' });
+  });
+});
+
 // Desmarcar una etapa como completada (reabrirla)
 apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
   const { id } = req.params;

@@ -392,6 +392,11 @@ class ApiClient {
     return data;
   }
 
+  async unstartStage(id: number): Promise<{ message: string }> {
+    const { data } = await this.api.put(`/stages/${id}/unstart`);
+    return data;
+  }
+
   async deleteStage(id: number): Promise<{ message: string }> {
     const { data } = await this.api.delete(`/stages/${id}`);
     return data;
