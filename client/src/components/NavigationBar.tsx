@@ -306,6 +306,20 @@ export default function NavigationBar() {
           >
             Etapas Predefinidas
           </Button>
+
+          <Button
+            component={RouterLink}
+            to="/audit-logs"
+            color="inherit"
+            startIcon={<LayersIcon />}
+            variant={isActive('/audit-logs') ? 'outlined' : 'text'}
+            sx={{ 
+              borderColor: 'white',
+              '&:hover': { borderColor: 'white' }
+            }}
+          >
+            Historial
+          </Button>
         </Box>
 
         <IconButton

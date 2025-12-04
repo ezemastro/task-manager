@@ -210,6 +210,40 @@ export interface UserFilters {
   role?: string;
 }
 
+// ==================== AUDIT LOG TYPES ====================
+
+export interface AuditLog {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  user_name: string;
+  action: string;
+  entity_type: string;
+  entity_id?: number;
+  details?: string;
+  ip_address?: string;
+  created_at: string;
+}
+
+export interface AuditLogFilters {
+  user_id?: number;
+  entity_type?: string;
+  entity_id?: number;
+  action?: string;
+  from_date?: string;
+  to_date?: string;
+  limit?: number;
+}
+
+export interface AuditLogStats {
+  total_actions: number;
+  unique_users: number;
+  active_days: number;
+  entity_type: string;
+  action: string;
+  count: number;
+}
+
 // ==================== AUTHENTICATION TYPES ====================
 
 export interface Organization {
@@ -568,6 +602,18 @@ class ApiClient {
 
   async reorderStageTemplates(templateOrders: Array<{ id: number; order_number: number }>): Promise<{ message: string }> {
     const { data } = await this.api.put('/stage-templates/reorder', { templates: templateOrders });
+    return data;
+  }
+
+  // ==================== AUDIT LOGS ====================
+
+  async getAuditLogs(filters?: AuditLogFilters): Promise<AuditLog[]> {
+    const { data } = await this.api.get<AuditLog[]>('/audit-logs', { params: filters });
+    return data;
+  }
+
+  async getAuditLogStats(): Promise<AuditLogStats[]> {
+    const { data } = await this.api.get<AuditLogStats[]>('/audit-logs/stats');
     return data;
   }
 }

@@ -163,6 +163,39 @@ function initializeDatabase() {
       )
     `);
 
+    // Tabla de auditoría
+    db.run(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER,
+        details TEXT,
+        ip_address TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+
+    // Crear índices para mejorar el rendimiento de las consultas de auditoría
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_organization 
+      ON audit_logs(organization_id, created_at DESC)
+    `);
+    
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_user 
+      ON audit_logs(user_id, created_at DESC)
+    `);
+    
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_entity 
+      ON audit_logs(entity_type, entity_id)
+    `);
+
     // Insertar usuarios de ejemplo si la tabla está vacía
     // db.get('SELECT COUNT(*) as count FROM users', [], (err, row: any) => {
     //   if (!err && row.count === 0) {
@@ -184,6 +217,126 @@ function initializeDatabase() {
     // });
   });
 }
+
+// ==================== AUDIT LOG HELPER ====================
+
+interface AuditLogParams {
+  organizationId: number;
+  userId: number;
+  action: string;
+  entityType: string;
+  entityId?: number;
+  details?: string;
+  ipAddress?: string;
+}
+
+function logAudit(params: AuditLogParams) {
+  const { organizationId, userId, action, entityType, entityId, details, ipAddress } = params;
+  
+  const sql = `
+    INSERT INTO audit_logs 
+    (organization_id, user_id, action, entity_type, entity_id, details, ip_address) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+  
+  db.run(sql, [
+    organizationId,
+    userId,
+    action,
+    entityType,
+    entityId || null,
+    details || null,
+    ipAddress || null
+  ], (err) => {
+    if (err) {
+      console.error('Error al registrar auditoría:', err);
+    }
+  });
+}
+
+// ==================== AUDIT LOGS ENDPOINTS ====================
+
+// Obtener logs de auditoría con filtros
+apiRouter.get('/audit-logs', (req: Request, res: Response) => {
+  const { user_id, entity_type, entity_id, action, from_date, to_date, limit = 100 } = req.query;
+  const organizationId = req.user!.organizationId;
+
+  let sql = `
+    SELECT 
+      a.*,
+      u.name as user_name
+    FROM audit_logs a
+    LEFT JOIN users u ON a.user_id = u.id
+    WHERE a.organization_id = ?
+  `;
+  const params: any[] = [organizationId];
+
+  if (user_id) {
+    sql += ' AND a.user_id = ?';
+    params.push(user_id);
+  }
+
+  if (entity_type) {
+    sql += ' AND a.entity_type = ?';
+    params.push(entity_type);
+  }
+
+  if (entity_id) {
+    sql += ' AND a.entity_id = ?';
+    params.push(entity_id);
+  }
+
+  if (action) {
+    sql += ' AND a.action = ?';
+    params.push(action);
+  }
+
+  if (from_date) {
+    sql += ' AND a.created_at >= ?';
+    params.push(from_date);
+  }
+
+  if (to_date) {
+    sql += ' AND a.created_at <= ?';
+    params.push(to_date);
+  }
+
+  sql += ' ORDER BY a.created_at DESC LIMIT ?';
+  params.push(Number(limit));
+
+  db.all(sql, params, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Obtener estadísticas de auditoría
+apiRouter.get('/audit-logs/stats', (req: Request, res: Response) => {
+  const organizationId = req.user!.organizationId;
+
+  const sql = `
+    SELECT 
+      COUNT(*) as total_actions,
+      COUNT(DISTINCT user_id) as unique_users,
+      COUNT(DISTINCT DATE(created_at)) as active_days,
+      entity_type,
+      action,
+      COUNT(*) as count
+    FROM audit_logs
+    WHERE organization_id = ?
+    GROUP BY entity_type, action
+    ORDER BY count DESC
+  `;
+
+  db.all(sql, [organizationId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
 
 // ==================== CLIENTS ENDPOINTS ====================
 
@@ -233,7 +386,20 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.status(201).json({ id: this.lastID, name, email, phone });
+      
+      const clientId = this.lastID;
+      
+      logAudit({
+        organizationId,
+        userId: req.user!.userId,
+        action: 'CREATE',
+        entityType: 'client',
+        entityId: clientId,
+        details: JSON.stringify({ name, email, phone }),
+        ipAddress: req.ip
+      });
+      
+      res.status(201).json({ id: clientId, name, email, phone });
     }
   );
 });
@@ -242,6 +408,7 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
 apiRouter.put('/clients/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, email, phone } = req.body;
+  const organizationId = req.user!.organizationId;
 
   db.run(
     'UPDATE clients SET name = ?, email = ?, phone = ? WHERE id = ?',
@@ -255,6 +422,17 @@ apiRouter.put('/clients/:id', (req: Request, res: Response) => {
         res.status(404).json({ error: 'Cliente no encontrado' });
         return;
       }
+      
+      logAudit({
+        organizationId,
+        userId: req.user!.userId,
+        action: 'UPDATE',
+        entityType: 'client',
+        entityId: Number(id),
+        details: JSON.stringify({ name, email, phone }),
+        ipAddress: req.ip
+      });
+      
       res.json({ id, name, email, phone });
     }
   );
@@ -263,6 +441,7 @@ apiRouter.put('/clients/:id', (req: Request, res: Response) => {
 // DELETE client
 apiRouter.delete('/clients/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const organizationId = req.user!.organizationId;
   
   db.run('DELETE FROM clients WHERE id = ?', [id], function(err) {
     if (err) {
@@ -273,6 +452,16 @@ apiRouter.delete('/clients/:id', (req: Request, res: Response) => {
       res.status(404).json({ error: 'Cliente no encontrado' });
       return;
     }
+    
+    logAudit({
+      organizationId,
+      userId: req.user!.userId,
+      action: 'DELETE',
+      entityType: 'client',
+      entityId: Number(id),
+      ipAddress: req.ip
+    });
+    
     res.json({ message: 'Cliente eliminado correctamente' });
   });
 });
@@ -514,8 +703,20 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
       }
     });
 
+    const projectId = this.lastID;
+    
+    logAudit({
+      organizationId,
+      userId: req.user!.userId,
+      action: 'CREATE',
+      entityType: 'project',
+      entityId: projectId,
+      details: JSON.stringify({ name, description, client_id, responsible_id, deadline }),
+      ipAddress: req.ip
+    });
+
     res.status(201).json({
-      id: this.lastID,
+      id: projectId,
       name,
       description,
       client_id,
@@ -717,6 +918,7 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   updates.push('updated_at = CURRENT_TIMESTAMP');
   values.push(id);
 
+  const organizationId = req.user!.organizationId;
   const sql = `UPDATE projects SET ${updates.join(', ')} WHERE id = ?`;
   db.run(sql, values, function (err) {
     if (err) {
@@ -725,6 +927,17 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
     }
+    
+    logAudit({
+      organizationId,
+      userId: req.user!.userId,
+      action: 'UPDATE',
+      entityType: 'project',
+      entityId: Number(id),
+      details: JSON.stringify({ name, description, status, client_id, responsible_id, deadline }),
+      ipAddress: req.ip
+    });
+    
     res.json({ message: 'Proyecto actualizado exitosamente' });
   });
 });
@@ -732,6 +945,7 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
 // Eliminar un proyecto
 apiRouter.delete('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const organizationId = req.user!.organizationId;
 
   const sql = 'DELETE FROM projects WHERE id = ?';
   db.run(sql, [id], function (err) {
@@ -741,6 +955,16 @@ apiRouter.delete('/projects/:id', (req: Request, res: Response) => {
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
     }
+    
+    logAudit({
+      organizationId,
+      userId: req.user!.userId,
+      action: 'DELETE',
+      entityType: 'project',
+      entityId: Number(id),
+      ipAddress: req.ip
+    });
+    
     res.json({ message: 'Proyecto eliminado exitosamente' });
   });
 });
@@ -1146,6 +1370,21 @@ apiRouter.put('/stages/:id/complete', (req: Request, res: Response) => {
         return res.status(500).json({ error: err.message });
       }
 
+      // Obtener organizationId desde la etapa
+      db.get('SELECT p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+        if (!err && row) {
+          logAudit({
+            organizationId: row.organization_id,
+            userId: req.user!.userId,
+            action: 'COMPLETE',
+            entityType: 'stage',
+            entityId: Number(id),
+            details: JSON.stringify({ stage_name: currentStage.name }),
+            ipAddress: req.ip
+          });
+        }
+      });
+
       res.json({ 
         message: 'Etapa completada exitosamente'
       });
@@ -1165,6 +1404,21 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
     if (this.changes === 0) {
       return res.status(400).json({ error: 'La etapa ya fue iniciada o no existe' });
     }
+    
+    db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+      if (!err && row) {
+        logAudit({
+          organizationId: row.organization_id,
+          userId: req.user!.userId,
+          action: 'START',
+          entityType: 'stage',
+          entityId: Number(id),
+          details: JSON.stringify({ stage_name: row.name }),
+          ipAddress: req.ip
+        });
+      }
+    });
+    
     res.json({ message: 'Etapa iniciada exitosamente' });
   });
 });
@@ -1181,6 +1435,21 @@ apiRouter.put('/stages/:id/unstart', (req: Request, res: Response) => {
     if (this.changes === 0) {
       return res.status(400).json({ error: 'La etapa no está iniciada, ya está completada o no existe' });
     }
+    
+    db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+      if (!err && row) {
+        logAudit({
+          organizationId: row.organization_id,
+          userId: req.user!.userId,
+          action: 'UNSTART',
+          entityType: 'stage',
+          entityId: Number(id),
+          details: JSON.stringify({ stage_name: row.name }),
+          ipAddress: req.ip
+        });
+      }
+    });
+    
     res.json({ message: 'Etapa devuelta a estado no iniciada exitosamente' });
   });
 });
@@ -1197,6 +1466,21 @@ apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
     if (this.changes === 0) {
       return res.status(400).json({ error: 'La etapa no está completada o no existe' });
     }
+    
+    db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+      if (!err && row) {
+        logAudit({
+          organizationId: row.organization_id,
+          userId: req.user!.userId,
+          action: 'UNCOMPLETE',
+          entityType: 'stage',
+          entityId: Number(id),
+          details: JSON.stringify({ stage_name: row.name }),
+          ipAddress: req.ip
+        });
+      }
+    });
+    
     res.json({ message: 'Etapa reabierta exitosamente' });
   });
 });
@@ -1307,6 +1591,21 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
       if (this.changes === 0) {
         return res.status(404).json({ error: 'Etapa no encontrada' });
       }
+      
+      db.get('SELECT p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+        if (!err && row) {
+          logAudit({
+            organizationId: row.organization_id,
+            userId: req.user!.userId,
+            action: 'UPDATE',
+            entityType: 'stage',
+            entityId: Number(id),
+            details: JSON.stringify({ name, responsible_id, start_date, estimated_end_date, completed_date, intermediate_date, intermediate_date_note }),
+            ipAddress: req.ip
+          });
+        }
+      });
+      
       res.json({ message: 'Etapa actualizada exitosamente' });
     });
   }
@@ -1316,15 +1615,35 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
 apiRouter.delete('/stages/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const sql = 'DELETE FROM stages WHERE id = ?';
-  db.run(sql, [id], function (err) {
+  // Obtener info antes de eliminar
+  db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, stageInfo: any) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Etapa no encontrada' });
-    }
-    res.json({ message: 'Etapa eliminada exitosamente' });
+
+    const sql = 'DELETE FROM stages WHERE id = ?';
+    db.run(sql, [id], function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Etapa no encontrada' });
+      }
+      
+      if (stageInfo) {
+        logAudit({
+          organizationId: stageInfo.organization_id,
+          userId: req.user!.userId,
+          action: 'DELETE',
+          entityType: 'stage',
+          entityId: Number(id),
+          details: JSON.stringify({ stage_name: stageInfo.name }),
+          ipAddress: req.ip
+        });
+      }
+      
+      res.json({ message: 'Etapa eliminada exitosamente' });
+    });
   });
 });
 
@@ -1490,10 +1809,27 @@ apiRouter.post('/comments', (req: Request, res: Response) => {
         return res.status(500).json({ error: err.message });
       }
       
+      const commentId = this.lastID;
+      
       // Obtener el nombre del usuario para devolverlo
       db.get('SELECT name FROM users WHERE id = ?', [userId], (err, user: any) => {
+        // Log de auditoría
+        db.get('SELECT p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [stage_id], (err, row: any) => {
+          if (!err && row) {
+            logAudit({
+              organizationId: row.organization_id,
+              userId: req.user!.userId,
+              action: 'CREATE',
+              entityType: 'comment',
+              entityId: commentId,
+              details: JSON.stringify({ stage_id, content_preview: content.substring(0, 50) }),
+              ipAddress: req.ip
+            });
+          }
+        });
+        
         res.status(201).json({
-          id: this.lastID,
+          id: commentId,
           stage_id,
           content,
           user_id: userId,
@@ -1551,15 +1887,35 @@ apiRouter.get('/comments', (req: Request, res: Response) => {
 apiRouter.delete('/comments/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const sql = 'DELETE FROM comments WHERE id = ?';
-  db.run(sql, [id], function (err) {
+  // Obtener info antes de eliminar
+  db.get('SELECT c.stage_id, p.organization_id FROM comments c INNER JOIN stages s ON c.stage_id = s.id INNER JOIN projects p ON s.project_id = p.id WHERE c.id = ?', [id], (err, commentInfo: any) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Comentario no encontrado' });
-    }
-    res.json({ message: 'Comentario eliminado exitosamente' });
+
+    const sql = 'DELETE FROM comments WHERE id = ?';
+    db.run(sql, [id], function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Comentario no encontrado' });
+      }
+      
+      if (commentInfo) {
+        logAudit({
+          organizationId: commentInfo.organization_id,
+          userId: req.user!.userId,
+          action: 'DELETE',
+          entityType: 'comment',
+          entityId: Number(id),
+          details: JSON.stringify({ stage_id: commentInfo.stage_id }),
+          ipAddress: req.ip
+        });
+      }
+      
+      res.json({ message: 'Comentario eliminado exitosamente' });
+    });
   });
 });
 
@@ -1580,6 +1936,22 @@ apiRouter.put('/comments/:id', (req: Request, res: Response) => {
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Comentario no encontrado' });
     }
+    
+    // Log de auditoría
+    db.get('SELECT c.stage_id, p.organization_id FROM comments c INNER JOIN stages s ON c.stage_id = s.id INNER JOIN projects p ON s.project_id = p.id WHERE c.id = ?', [id], (err, commentInfo: any) => {
+      if (!err && commentInfo) {
+        logAudit({
+          organizationId: commentInfo.organization_id,
+          userId: req.user!.userId,
+          action: 'UPDATE',
+          entityType: 'comment',
+          entityId: Number(id),
+          details: JSON.stringify({ stage_id: commentInfo.stage_id, content_preview: content.substring(0, 50) }),
+          ipAddress: req.ip
+        });
+      }
+    });
+    
     res.json({ 
       id: Number(id),
       content,
