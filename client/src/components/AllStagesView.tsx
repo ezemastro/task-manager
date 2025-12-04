@@ -61,6 +61,8 @@ export default function AllStagesView() {
   const [searchTerm, setSearchTerm] = useState<string>(initialFilters.searchTerm || '');
   const [selectedUser, setSelectedUser] = useState<string>(initialFilters.selectedUser || '');
   const [selectedClient, setSelectedClient] = useState<string>(initialFilters.selectedClient || '');
+  const [deadlineFrom, setDeadlineFrom] = useState<string>(initialFilters.deadlineFrom || '');
+  const [deadlineTo, setDeadlineTo] = useState<string>(initialFilters.deadlineTo || '');
   const [sortBy, setSortBy] = useState<SortOption>(initialFilters.sortBy || 'project');
   const [showFilters, setShowFilters] = useState<boolean>(initialFilters.showFilters ?? true);
 
@@ -96,11 +98,13 @@ export default function AllStagesView() {
       searchTerm,
       selectedUser,
       selectedClient,
+      deadlineFrom,
+      deadlineTo,
       sortBy,
       showFilters,
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
-  }, [searchTerm, selectedUser, selectedClient, sortBy, showFilters]);
+  }, [searchTerm, selectedUser, selectedClient, deadlineFrom, deadlineTo, sortBy, showFilters]);
 
   // Guardar posición de scroll antes de navegar
   useEffect(() => {
@@ -151,6 +155,30 @@ export default function AllStagesView() {
       filtered = filtered.filter((s) => s.client_id?.toString() === selectedClient);
     }
 
+    // Filtro por rango de fecha límite
+    if (deadlineFrom || deadlineTo) {
+      filtered = filtered.filter((s) => {
+        if (!s.estimated_end_date) return false;
+        
+        const stageDate = new Date(s.estimated_end_date);
+        stageDate.setHours(0, 0, 0, 0);
+        
+        if (deadlineFrom) {
+          const fromDate = new Date(deadlineFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          if (stageDate < fromDate) return false;
+        }
+        
+        if (deadlineTo) {
+          const toDate = new Date(deadlineTo);
+          toDate.setHours(23, 59, 59, 999);
+          if (stageDate > toDate) return false;
+        }
+        
+        return true;
+      });
+    }
+
     // Ordenar
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -178,7 +206,7 @@ export default function AllStagesView() {
     });
 
     return filtered;
-  }, [stages, searchTerm, selectedUser, selectedClient, sortBy]);
+  }, [stages, searchTerm, selectedUser, selectedClient, deadlineFrom, deadlineTo, sortBy]);
 
   if (loading) {
     return (
@@ -303,6 +331,75 @@ export default function AllStagesView() {
               </Box>
             </Box>
 
+            {/* Tercera fila - Filtros de fecha límite */}
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Filtrar por Fecha Límite
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Box sx={{ flex: '1 1 180px', minWidth: '150px' }}>
+                  <TextField
+                    fullWidth
+                    label="Desde"
+                    type="date"
+                    value={deadlineFrom}
+                    onChange={(e) => setDeadlineFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Box>
+                <Box sx={{ flex: '1 1 180px', minWidth: '150px' }}>
+                  <TextField
+                    fullWidth
+                    label="Hasta"
+                    type="date"
+                    value={deadlineTo}
+                    onChange={(e) => setDeadlineTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Box>
+                
+                {/* Presets */}
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      const today = new Date();
+                      const in7Days = new Date(today);
+                      in7Days.setDate(today.getDate() + 7);
+                      setDeadlineFrom(today.toISOString().split('T')[0]);
+                      setDeadlineTo(in7Days.toISOString().split('T')[0]);
+                    }}
+                  >
+                    Próximos 7 días
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      const today = new Date();
+                      const in30Days = new Date(today);
+                      in30Days.setDate(today.getDate() + 30);
+                      setDeadlineFrom(today.toISOString().split('T')[0]);
+                      setDeadlineTo(in30Days.toISOString().split('T')[0]);
+                    }}
+                  >
+                    Próximos 30 días
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setDeadlineFrom('');
+                      setDeadlineTo('');
+                    }}
+                  >
+                    Limpiar
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
+
             {/* Filtros activos */}
             <Box>
               <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
@@ -330,13 +427,29 @@ export default function AllStagesView() {
                     onDelete={() => setSelectedClient('')}
                   />
                 )}
-                {(searchTerm || selectedUser || selectedClient) && (
+                {deadlineFrom && (
+                  <Chip
+                    label={`Desde: ${new Date(deadlineFrom).toLocaleDateString('es-AR')}`}
+                    size="small"
+                    onDelete={() => setDeadlineFrom('')}
+                  />
+                )}
+                {deadlineTo && (
+                  <Chip
+                    label={`Hasta: ${new Date(deadlineTo).toLocaleDateString('es-AR')}`}
+                    size="small"
+                    onDelete={() => setDeadlineTo('')}
+                  />
+                )}
+                {(searchTerm || selectedUser || selectedClient || deadlineFrom || deadlineTo) && (
                   <Button
                     size="small"
                     onClick={() => {
                       setSearchTerm('');
                       setSelectedUser('');
                       setSelectedClient('');
+                      setDeadlineFrom('');
+                      setDeadlineTo('');
                     }}
                   >
                     Limpiar todo
