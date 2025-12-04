@@ -39,6 +39,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import { apiClient, type StageDetail, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
+import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
@@ -648,7 +649,7 @@ export default function StageDetail() {
                     </Stack>
                   ) : stage.start_date ? (
                     <Typography variant="body2">
-                      {new Date(stage.start_date).toLocaleDateString()}
+                      {formatLocalDate(stage.start_date)}
                     </Typography>
                   ) : (
                     <Typography variant="body2" color="text.secondary" fontStyle="italic">
@@ -688,7 +689,7 @@ export default function StageDetail() {
                     </Stack>
                   ) : stage.estimated_end_date ? (
                     <Typography variant="body2">
-                      {new Date(stage.estimated_end_date).toLocaleDateString()}
+                      {formatLocalDate(stage.estimated_end_date)}
                     </Typography>
                   ) : (
                     <Typography variant="body2" color="text.secondary" fontStyle="italic">
@@ -729,7 +730,7 @@ export default function StageDetail() {
                       </Stack>
                     ) : stage.completed_date ? (
                       <Typography variant="body2">
-                        {new Date(stage.completed_date).toLocaleDateString()}
+                        {formatLocalDate(stage.completed_date)}
                       </Typography>
                     ) : (
                       <Typography variant="body2" color="text.secondary" fontStyle="italic">
@@ -779,7 +780,7 @@ export default function StageDetail() {
                     </Stack>
                   ) : stage.intermediate_date ? (
                     <Typography variant="body2">
-                      {new Date(stage.intermediate_date).toLocaleDateString()}
+                      {formatLocalDate(stage.intermediate_date)}
                     </Typography>
                   ) : (
                     <Typography variant="body2" color="text.secondary" fontStyle="italic">
@@ -972,7 +973,7 @@ export default function StageDetail() {
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Typography variant="subtitle2">{comment.author}</Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {new Date(comment.created_at).toLocaleString()}
+                            {formatLocalDateTime(comment.created_at)}
                           </Typography>
                         </Stack>
                       }

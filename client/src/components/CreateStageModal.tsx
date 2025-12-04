@@ -17,6 +17,7 @@ import {
   FormHelperText,
 } from '@mui/material';
 import { apiClient, type CreateStageRequest, type User } from '../services/apiClient';
+import { dateStringToLocalISO, getTodayDateString } from '../utils/dateUtils';
 
 interface CreateStageModalProps {
   open: boolean;
@@ -128,8 +129,8 @@ export default function CreateStageModal({
         project_id: projectId,
         name: formData.name,
         responsible_id: formData.responsible_id,
-        start_date: formData.start_date || undefined,
-        estimated_end_date: formData.estimated_end_date || undefined,
+        start_date: dateStringToLocalISO(formData.start_date),
+        estimated_end_date: dateStringToLocalISO(formData.estimated_end_date),
       });
       
       // Limpiar formulario
@@ -182,7 +183,7 @@ export default function CreateStageModal({
   };
 
   // Obtener fecha de hoy en formato YYYY-MM-DD
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateString();
 
   return (
     <Dialog 

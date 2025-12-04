@@ -29,6 +29,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import PauseCircleIcon from '@mui/icons-material/PauseCircle';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import { apiClient, type Project, type Stage } from '../services/apiClient';
+import { formatLocalDate } from '../utils/dateUtils';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
@@ -356,11 +357,11 @@ export default function ProjectDetail() {
                 </Box>
               )}
               <Typography variant="caption" color="text.secondary">
-                Creado: {new Date(project.created_at).toLocaleDateString()}
+                Creado: {formatLocalDate(project.created_at)}
               </Typography>
               {project.updated_at && (
                 <Typography variant="caption" color="text.secondary">
-                  Actualizado: {new Date(project.updated_at).toLocaleDateString()}
+                  Actualizado: {formatLocalDate(project.updated_at)}
                 </Typography>
               )}
               {project.deadline && (

@@ -17,6 +17,7 @@ import {
 import { Add as AddIcon } from '@mui/icons-material';
 import { apiClient, type CreateProjectRequest, type Client, type User } from '../services/apiClient';
 import CreateClientModal from './CreateClientModal';
+import { dateStringToLocalISO } from '../utils/dateUtils';
 
 interface CreateProjectModalProps {
   open: boolean;
@@ -112,7 +113,13 @@ export default function CreateProjectModal({
     setErrorMessage('');
 
     try {
-      const result = await apiClient.createProject(formData);
+      // Convertir fecha a ISO con hora local
+      const projectData = {
+        ...formData,
+        deadline: dateStringToLocalISO(formData.deadline)
+      };
+      
+      const result = await apiClient.createProject(projectData);
       
       // Limpiar formulario
       setFormData({

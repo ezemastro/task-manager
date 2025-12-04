@@ -16,6 +16,7 @@ import {
   Stack,
 } from '@mui/material';
 import { apiClient, type User } from '../services/apiClient';
+import { dateStringToLocalISO, isoToDateString } from '../utils/dateUtils';
 
 interface EditStageModalProps {
   open: boolean;
@@ -40,8 +41,8 @@ export default function EditStageModal({
   const [formData, setFormData] = useState({
     name: initialData.name,
     responsible_id: initialData.responsible_id,
-    start_date: initialData.start_date ? initialData.start_date.substring(0, 10) : '',
-    estimated_end_date: initialData.estimated_end_date ? initialData.estimated_end_date.substring(0, 10) : '',
+    start_date: isoToDateString(initialData.start_date),
+    estimated_end_date: isoToDateString(initialData.estimated_end_date),
   });
   
   const [users, setUsers] = useState<User[]>([]);
@@ -49,20 +50,13 @@ export default function EditStageModal({
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Función para convertir fecha ISO a formato YYYY-MM-DD sin conversión de zona horaria
-  const formatDateForInput = (dateString?: string): string => {
-    if (!dateString) return '';
-    // Extraer solo la parte de la fecha (YYYY-MM-DD)
-    return dateString.substring(0, 10);
-  };
-
   useEffect(() => {
     if (open) {
       setFormData({
         name: initialData.name,
         responsible_id: initialData.responsible_id,
-        start_date: formatDateForInput(initialData.start_date),
-        estimated_end_date: formatDateForInput(initialData.estimated_end_date),
+        start_date: isoToDateString(initialData.start_date),
+        estimated_end_date: isoToDateString(initialData.estimated_end_date),
       });
       fetchUsers();
     }
@@ -102,8 +96,8 @@ export default function EditStageModal({
       await apiClient.updateStage(stageId, {
         name: formData.name,
         responsible_id: formData.responsible_id || null,
-        start_date: formData.start_date || null,
-        estimated_end_date: formData.estimated_end_date || null,
+        start_date: dateStringToLocalISO(formData.start_date) || null,
+        estimated_end_date: dateStringToLocalISO(formData.estimated_end_date) || null,
       });
 
       if (onSuccess) {

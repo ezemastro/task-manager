@@ -15,6 +15,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { apiClient, type Client, type User } from '../services/apiClient';
+import { dateStringToLocalISO, isoToDateString } from '../utils/dateUtils';
 
 interface EditProjectModalProps {
   open: boolean;
@@ -42,7 +43,7 @@ export default function EditProjectModal({
     description: initialData.description || '',
     client_id: initialData.client_id,
     responsible_id: initialData.responsible_id,
-    deadline: initialData.deadline ? initialData.deadline.split('T')[0] : '',
+    deadline: isoToDateString(initialData.deadline),
   });
   
   const [clients, setClients] = useState<Client[]>([]);
@@ -58,7 +59,7 @@ export default function EditProjectModal({
         description: initialData.description || '',
         client_id: initialData.client_id,
         responsible_id: initialData.responsible_id,
-        deadline: initialData.deadline ? initialData.deadline.split('T')[0] : '',
+        deadline: isoToDateString(initialData.deadline),
       });
       fetchClients();
       fetchUsers();
@@ -116,7 +117,7 @@ export default function EditProjectModal({
         description: formData.description || undefined,
         client_id: formData.client_id || undefined,
         responsible_id: formData.responsible_id || undefined,
-        deadline: formData.deadline || undefined,
+        deadline: dateStringToLocalISO(formData.deadline),
       });
 
       if (onSuccess) {

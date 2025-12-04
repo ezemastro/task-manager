@@ -2,6 +2,7 @@ import { Chip } from '@mui/material';
 import EventIcon from '@mui/icons-material/Event';
 import WarningIcon from '@mui/icons-material/Warning';
 import ErrorIcon from '@mui/icons-material/Error';
+import { formatLocalDate } from '../utils/dateUtils';
 
 interface DeadlineChipProps {
   date: string | null | undefined;
@@ -33,7 +34,7 @@ export default function DeadlineChip({
     return (
       <Chip
         icon={showIcon ? <EventIcon /> : undefined}
-        label={label || deadlineDate.toLocaleDateString('es-ES')}
+        label={label || formatLocalDate(date)}
         size={size}
         sx={{ 
           height: size === 'small' ? 22 : undefined, 
@@ -48,7 +49,7 @@ export default function DeadlineChip({
     return (
       <Chip
         icon={showIcon ? <ErrorIcon /> : undefined}
-        label={label || `Vencido: ${deadlineDate.toLocaleDateString('es-ES')}`}
+        label={label || `Vencido: ${formatLocalDate(date)}`}
         size={size}
         color="error"
         sx={{ 
@@ -80,7 +81,7 @@ export default function DeadlineChip({
     return (
       <Chip
         icon={showIcon ? <WarningIcon /> : undefined}
-        label={label || `${diffDays} día${diffDays > 1 ? 's' : ''}: ${deadlineDate.toLocaleDateString('es-ES')}`}
+        label={label || `${diffDays} día${diffDays > 1 ? 's' : ''}: ${formatLocalDate(date)}`}
         size={size}
         color="warning"
         variant="outlined"
@@ -96,7 +97,7 @@ export default function DeadlineChip({
   return (
     <Chip
       icon={showIcon ? <EventIcon /> : undefined}
-      label={label || deadlineDate.toLocaleDateString('es-ES')}
+      label={label || formatLocalDate(date)}
       size={size}
       sx={{ 
         height: size === 'small' ? 22 : undefined, 
