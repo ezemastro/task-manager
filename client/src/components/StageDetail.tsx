@@ -493,7 +493,7 @@ export default function StageDetail() {
             </Stack>
           )}
           {stage.project_name && stage.project_id && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="h6" color="text.secondary">
               Proyecto:{' '}
               <Link
                 component={RouterLink}
@@ -501,6 +501,7 @@ export default function StageDetail() {
                 sx={{
                   color: 'primary.main',
                   textDecoration: 'none',
+                  fontSize: 'inherit',
                   '&:hover': {
                     textDecoration: 'underline',
                   },
