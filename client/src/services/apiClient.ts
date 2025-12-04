@@ -134,7 +134,7 @@ export interface UpdateProjectRequest {
   status?: string;
   client_id?: number;
   responsible_id?: number;
-  deadline?: string;
+  deadline?: string | null;
 }
 
 export interface CreateStageRequest {

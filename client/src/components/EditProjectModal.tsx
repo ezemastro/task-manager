@@ -117,7 +117,7 @@ export default function EditProjectModal({
         description: formData.description || undefined,
         client_id: formData.client_id || undefined,
         responsible_id: formData.responsible_id || undefined,
-        deadline: dateStringToLocalISO(formData.deadline),
+        deadline: formData.deadline ? dateStringToLocalISO(formData.deadline) : null,
       });
 
       if (onSuccess) {
