@@ -185,7 +185,7 @@ export default function AuditLogsView() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" component="h1">
-            Historial
+            Registro de cambios
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Historial completo de cambios y acciones en el sistema
