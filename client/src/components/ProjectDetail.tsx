@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -50,17 +50,11 @@ export default function ProjectDetail() {
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
   const [deletingStage, setDeletingStage] = useState(false);
   
-  // Ref para mantener la posición del scroll
-  const scrollPositionRef = useRef<number>(0);
-  const shouldRestoreScrollRef = useRef<boolean>(false);
+  // Storage key para el scroll
+  const SCROLL_KEY = `projectDetail_scroll_${id}`;
 
   const fetchProjectDetail = useCallback(async () => {
     if (!id) return;
-    
-    // Guardar posición de scroll si se debe restaurar
-    if (shouldRestoreScrollRef.current) {
-      scrollPositionRef.current = window.scrollY;
-    }
     
     setLoading(true);
     setError('');
@@ -80,13 +74,31 @@ export default function ProjectDetail() {
     fetchProjectDetail();
   }, [fetchProjectDetail]);
   
-  // Restaurar scroll después de actualizar los datos
+  // Guardar posición de scroll mientras navegas por la página
   useEffect(() => {
-    if (!loading && shouldRestoreScrollRef.current) {
-      window.scrollTo(0, scrollPositionRef.current);
-      shouldRestoreScrollRef.current = false;
+    const handleScroll = () => {
+      sessionStorage.setItem(SCROLL_KEY, window.scrollY.toString());
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [SCROLL_KEY]);
+  
+  // Restaurar scroll cuando se carga la página
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll && !loading) {
+      setTimeout(() => {
+        window.scrollTo(0, parseInt(savedScroll, 10));
+      }, 100);
     }
-  }, [loading]);
+  }, [loading, SCROLL_KEY]);
+
+  // Función para volver atrás limpiando el scroll guardado
+  const handleBack = () => {
+    sessionStorage.removeItem(SCROLL_KEY);
+    navigate(-1);
+  };
 
   const handleCompleteProject = async () => {
     if (!id || !project) return;
@@ -154,12 +166,10 @@ export default function ProjectDetail() {
 
   const handleStageCreated = () => {
     setShowCreateStageModal(false);
-    shouldRestoreScrollRef.current = true;
     fetchProjectDetail();
   };
 
   const handleStageUpdated = () => {
-    shouldRestoreScrollRef.current = true;
     fetchProjectDetail();
   };
 
@@ -176,7 +186,6 @@ export default function ProjectDetail() {
       await apiClient.deleteStage(stageToDelete.id);
       setShowDeleteStageDialog(false);
       setStageToDelete(null);
-      shouldRestoreScrollRef.current = true;
       await fetchProjectDetail();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al eliminar etapa';
@@ -237,7 +246,7 @@ export default function ProjectDetail() {
     return (
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Alert severity="error">Proyecto no encontrado</Alert>
-        <Button onClick={() => navigate(-1)} sx={{ mt: 2 }}>
+        <Button onClick={handleBack} sx={{ mt: 2 }}>
           Volver
         </Button>
       </Container>
@@ -251,7 +260,7 @@ export default function ProjectDetail() {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-        <IconButton onClick={() => navigate(-1)}>
+        <IconButton onClick={handleBack}>
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
