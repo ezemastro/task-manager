@@ -79,6 +79,30 @@ export default function ProjectsList() {
     fetchProjects();
   }, []);
 
+  // Guardar posición de scroll
+  const SCROLL_KEY = 'projectsList_scroll';
+
+  useEffect(() => {
+    const handleScroll = () => {
+      sessionStorage.setItem(SCROLL_KEY, window.scrollY.toString());
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Restaurar posición de scroll después de cargar
+  useEffect(() => {
+    if (!loading && projects.length > 0) {
+      const savedScroll = sessionStorage.getItem(SCROLL_KEY);
+      if (savedScroll) {
+        setTimeout(() => {
+          window.scrollTo(0, parseInt(savedScroll, 10));
+        }, 100);
+      }
+    }
+  }, [loading, projects.length]);
+
   // Filtrar y ordenar proyectos
   const filteredAndSortedProjects = useMemo(() => {
     let filtered = [...projects];
