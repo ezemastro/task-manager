@@ -32,6 +32,18 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 // Initialize database tables
 function initializeDatabase() {
   db.serialize(() => {
+    // Tabla de cuentas de usuario (autenticación global)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Tabla de organizaciones
     db.run(`
       CREATE TABLE IF NOT EXISTS organizations (
@@ -42,18 +54,33 @@ function initializeDatabase() {
       )
     `);
 
-    // Tabla de usuarios
+    // Tabla de membresías (relación accounts-organizations)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS organization_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL,
+        organization_id INTEGER NOT NULL,
+        role TEXT DEFAULT 'member',
+        scopes TEXT DEFAULT '[]',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        UNIQUE(account_id, organization_id)
+      )
+    `);
+
+    // Tabla de usuarios (ahora vinculada a accounts por email)
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         organization_id INTEGER NOT NULL,
+        account_email TEXT NOT NULL,
         name TEXT NOT NULL,
-        email TEXT UNIQUE,
-        password_hash TEXT,
         role TEXT,
-        scopes TEXT DEFAULT '[]',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        FOREIGN KEY (account_email) REFERENCES accounts(email) ON DELETE CASCADE,
+        UNIQUE(organization_id, account_email)
       )
     `);
 
@@ -803,7 +830,7 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
       SELECT 
         s.*,
         u.name as responsible_name,
-        u.email as responsible_email,
+        u.account_email as responsible_email,
         u.role as responsible_role
       FROM stages s
       LEFT JOIN users u ON s.responsible_id = u.id
@@ -981,13 +1008,13 @@ apiRouter.post('/users', (req: Request, res: Response) => {
   }
 
   // Email es opcional, pero si se proporciona no debe estar vacío
-  const emailValue = email && email.trim() ? email.trim() : null;
+  const emailValue = email && email.trim() ? email.trim().toLowerCase() : null;
 
-  const sql = 'INSERT INTO users (organization_id, name, email, role) VALUES (?, ?, ?, ?)';
+  const sql = 'INSERT INTO users (organization_id, name, account_email, role) VALUES (?, ?, ?, ?)';
   db.run(sql, [organizationId, name.trim(), emailValue, role?.trim() || null], function (err) {
     if (err) {
       if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: 'Ya existe un usuario con ese email' });
+        return res.status(400).json({ error: 'Ya existe un usuario con ese email en esta organización' });
       }
       return res.status(500).json({ error: err.message });
     }
@@ -1006,20 +1033,20 @@ apiRouter.get('/users', (req: Request, res: Response) => {
   const { name, role } = req.query;
   const organizationId = req.user!.organizationId;
   
-  let sql = 'SELECT id, name, email, role FROM users WHERE organization_id = ?';
+  let sql = 'SELECT u.id, u.name, u.account_email as email, u.role FROM users u WHERE u.organization_id = ?';
   const params: any[] = [organizationId];
 
   if (name) {
-    sql += ' AND name LIKE ?';
+    sql += ' AND u.name LIKE ?';
     params.push(`%${name}%`);
   }
 
   if (role) {
-    sql += ' AND role LIKE ?';
+    sql += ' AND u.role LIKE ?';
     params.push(`%${role}%`);
   }
 
-  sql += ' ORDER BY name';
+  sql += ' ORDER BY u.name';
 
   db.all(sql, params, (err, rows) => {
     if (err) {
@@ -1033,7 +1060,7 @@ apiRouter.get('/users', (req: Request, res: Response) => {
 apiRouter.get('/users/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const sql = 'SELECT * FROM users WHERE id = ?';
+  const sql = 'SELECT u.id, u.name, u.account_email as email, u.role, u.organization_id FROM users u WHERE u.id = ?';
   db.get(sql, [id], (err, row) => {
     if (err) {
       return res.status(500).json({ error: err.message });
@@ -1050,11 +1077,12 @@ apiRouter.put('/users/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, email, role } = req.body;
 
-  const sql = 'UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), role = COALESCE(?, role) WHERE id = ?';
-  db.run(sql, [name, email, role, id], function (err) {
+  const emailValue = email ? email.trim().toLowerCase() : undefined;
+  const sql = 'UPDATE users SET name = COALESCE(?, name), account_email = COALESCE(?, account_email), role = COALESCE(?, role) WHERE id = ?';
+  db.run(sql, [name, emailValue, role, id], function (err) {
     if (err) {
       if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: 'Ya existe un usuario con ese email' });
+        return res.status(400).json({ error: 'Ya existe un usuario con ese email en esta organización' });
       }
       return res.status(500).json({ error: err.message });
     }
@@ -1175,7 +1203,7 @@ apiRouter.get('/stages', (req: Request, res: Response) => {
     SELECT 
       s.*,
       u.name as responsible_name,
-      u.email as responsible_email,
+      u.account_email as responsible_email,
       u.role as responsible_role,
       p.name as project_name,
       p.client_id,
@@ -1305,7 +1333,7 @@ apiRouter.get('/stages/:id', (req: Request, res: Response) => {
     SELECT 
       s.*,
       u.name as responsible_name,
-      u.email as responsible_email,
+      u.account_email as responsible_email,
       u.role as responsible_role,
       p.name as project_name,
       p.client_id,

@@ -257,12 +257,13 @@ export interface Organization {
 
 export interface AuthUser {
   id: number;
+  accountId: number;
   organizationId: number;
   organizationName: string;
   name: string;
   email: string;
   role: string;
-  scopes: string[];
+  scopes?: string[];
 }
 
 export interface LoginRequest {
