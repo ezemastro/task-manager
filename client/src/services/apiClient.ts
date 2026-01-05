@@ -220,6 +220,7 @@ export interface AuditLog {
   action: string;
   entity_type: string;
   entity_id?: number;
+  project_name?: string;
   details?: string;
   ip_address?: string;
   created_at: string;

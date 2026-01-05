@@ -199,6 +199,7 @@ function initializeDatabase() {
         action TEXT NOT NULL,
         entity_type TEXT NOT NULL,
         entity_id INTEGER,
+        project_name TEXT,
         details TEXT,
         ip_address TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -253,17 +254,18 @@ interface AuditLogParams {
   action: string;
   entityType: string;
   entityId?: number;
+  projectName?: string;
   details?: string;
   ipAddress?: string;
 }
 
 function logAudit(params: AuditLogParams) {
-  const { organizationId, userId, action, entityType, entityId, details, ipAddress } = params;
+  const { organizationId, userId, action, entityType, entityId, projectName, details, ipAddress } = params;
   
   const sql = `
     INSERT INTO audit_logs 
-    (organization_id, user_id, action, entity_type, entity_id, details, ip_address) 
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (organization_id, user_id, action, entity_type, entity_id, project_name, details, ip_address) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
   
   db.run(sql, [
@@ -272,6 +274,7 @@ function logAudit(params: AuditLogParams) {
     action,
     entityType,
     entityId || null,
+    projectName || null,
     details || null,
     ipAddress || null
   ], (err) => {
@@ -738,6 +741,7 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
       action: 'CREATE',
       entityType: 'project',
       entityId: projectId,
+      projectName: name,
       details: JSON.stringify({ name, description, client_id, responsible_id, deadline }),
       ipAddress: req.ip
     });
@@ -955,14 +959,20 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
     }
     
-    logAudit({
-      organizationId,
-      userId: req.user!.userId,
-      action: 'UPDATE',
-      entityType: 'project',
-      entityId: Number(id),
-      details: JSON.stringify({ name, description, status, client_id, responsible_id, deadline }),
-      ipAddress: req.ip
+    // Obtener nombre del proyecto si se actualizó
+    db.get('SELECT name FROM projects WHERE id = ?', [id], (err, project: any) => {
+      const projectName = (name || project?.name) as string;
+      
+      logAudit({
+        organizationId,
+        userId: req.user!.userId,
+        action: 'UPDATE',
+        entityType: 'project',
+        entityId: Number(id),
+        projectName: projectName,
+        details: JSON.stringify({ name, description, status, client_id, responsible_id, deadline }),
+        ipAddress: req.ip
+      });
     });
     
     res.json({ message: 'Proyecto actualizado exitosamente' });
@@ -974,25 +984,31 @@ apiRouter.delete('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const organizationId = req.user!.organizationId;
 
-  const sql = 'DELETE FROM projects WHERE id = ?';
-  db.run(sql, [id], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Proyecto no encontrado' });
-    }
+  // Obtener nombre antes de eliminar
+  db.get('SELECT name FROM projects WHERE id = ?', [id], (err, project: any) => {
+    const projectName = project?.name;
     
-    logAudit({
-      organizationId,
-      userId: req.user!.userId,
-      action: 'DELETE',
-      entityType: 'project',
-      entityId: Number(id),
-      ipAddress: req.ip
+    const sql = 'DELETE FROM projects WHERE id = ?';
+    db.run(sql, [id], function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Proyecto no encontrado' });
+      }
+      
+      logAudit({
+        organizationId,
+        userId: req.user!.userId,
+        action: 'DELETE',
+        entityType: 'project',
+        entityId: Number(id),
+        projectName: projectName,
+        ipAddress: req.ip
+      });
+      
+      res.json({ message: 'Proyecto eliminado exitosamente' });
     });
-    
-    res.json({ message: 'Proyecto eliminado exitosamente' });
   });
 });
 
@@ -1398,8 +1414,8 @@ apiRouter.put('/stages/:id/complete', (req: Request, res: Response) => {
         return res.status(500).json({ error: err.message });
       }
 
-      // Obtener organizationId desde la etapa
-      db.get('SELECT p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+      // Obtener organizationId y project_name desde la etapa
+      db.get('SELECT p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
         if (!err && row) {
           logAudit({
             organizationId: row.organization_id,
@@ -1407,7 +1423,8 @@ apiRouter.put('/stages/:id/complete', (req: Request, res: Response) => {
             action: 'COMPLETE',
             entityType: 'stage',
             entityId: Number(id),
-            details: JSON.stringify({ stage_name: currentStage.name }),
+            projectName: row.project_name,
+            details: JSON.stringify({ stage_name: currentStage.name, project_name: row.project_name }),
             ipAddress: req.ip
           });
         }
@@ -1433,7 +1450,7 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La etapa ya fue iniciada o no existe' });
     }
     
-    db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+    db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
       if (!err && row) {
         logAudit({
           organizationId: row.organization_id,
@@ -1441,7 +1458,8 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
           action: 'START',
           entityType: 'stage',
           entityId: Number(id),
-          details: JSON.stringify({ stage_name: row.name }),
+          projectName: row.project_name,
+          details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }),
           ipAddress: req.ip
         });
       }
@@ -1464,7 +1482,7 @@ apiRouter.put('/stages/:id/unstart', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La etapa no está iniciada, ya está completada o no existe' });
     }
     
-    db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+    db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
       if (!err && row) {
         logAudit({
           organizationId: row.organization_id,
@@ -1472,7 +1490,8 @@ apiRouter.put('/stages/:id/unstart', (req: Request, res: Response) => {
           action: 'UNSTART',
           entityType: 'stage',
           entityId: Number(id),
-          details: JSON.stringify({ stage_name: row.name }),
+          projectName: row.project_name,
+          details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }),
           ipAddress: req.ip
         });
       }
@@ -1495,7 +1514,7 @@ apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La etapa no está completada o no existe' });
     }
     
-    db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+    db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
       if (!err && row) {
         logAudit({
           organizationId: row.organization_id,
@@ -1503,7 +1522,8 @@ apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
           action: 'UNCOMPLETE',
           entityType: 'stage',
           entityId: Number(id),
-          details: JSON.stringify({ stage_name: row.name }),
+          projectName: row.project_name,
+          details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }),
           ipAddress: req.ip
         });
       }
@@ -1620,7 +1640,7 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Etapa no encontrada' });
       }
       
-      db.get('SELECT p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
+      db.get('SELECT s.name as stage_name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
         if (!err && row) {
           logAudit({
             organizationId: row.organization_id,
@@ -1628,7 +1648,8 @@ apiRouter.put('/stages/:id', (req: Request, res: Response) => {
             action: 'UPDATE',
             entityType: 'stage',
             entityId: Number(id),
-            details: JSON.stringify({ name, responsible_id, start_date, estimated_end_date, completed_date, intermediate_date, intermediate_date_note }),
+            projectName: row.project_name,
+            details: JSON.stringify({ stage_name: row.stage_name, project_name: row.project_name, updates: { name, responsible_id, start_date, estimated_end_date, completed_date, intermediate_date, intermediate_date_note } }),
             ipAddress: req.ip
           });
         }
@@ -1644,7 +1665,7 @@ apiRouter.delete('/stages/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
   // Obtener info antes de eliminar
-  db.get('SELECT s.name, p.organization_id FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, stageInfo: any) => {
+  db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, stageInfo: any) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1665,7 +1686,8 @@ apiRouter.delete('/stages/:id', (req: Request, res: Response) => {
           action: 'DELETE',
           entityType: 'stage',
           entityId: Number(id),
-          details: JSON.stringify({ stage_name: stageInfo.name }),
+          projectName: stageInfo.project_name,
+          details: JSON.stringify({ stage_name: stageInfo.name, project_name: stageInfo.project_name }),
           ipAddress: req.ip
         });
       }

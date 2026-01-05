@@ -333,6 +333,7 @@ export default function AuditLogsView() {
               <TableCell>Usuario</TableCell>
               <TableCell>Acción</TableCell>
               <TableCell>Entidad</TableCell>
+              <TableCell>Proyecto</TableCell>
               <TableCell>ID</TableCell>
               <TableCell>Detalles</TableCell>
             </TableRow>
@@ -340,7 +341,7 @@ export default function AuditLogsView() {
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   <Typography variant="body2" color="text.secondary">
                     No hay registros de auditoría
                   </Typography>
@@ -376,6 +377,11 @@ export default function AuditLogsView() {
                     <TableCell sx={{ py: 1.5 }}>
                       <Typography variant="body2">
                         {getEntityTypeLabel(log.entity_type)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 1.5 }}>
+                      <Typography variant="body2">
+                        {log.project_name || '-'}
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ py: 1.5 }}>
