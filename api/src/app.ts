@@ -4,6 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { apiRouter } from './apiRouter';
 import { authRouter } from './authRouter';
+import { runMigrations } from './runMigrations';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -41,6 +42,23 @@ app.get(/^(?!\/api).*/, (req: Request, res: Response) => {
 
 // ==================== SERVER START ====================
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+async function startServer() {
+  // Ejecutar migraciones solo en producción
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      await runMigrations();
+    } catch (error) {
+      console.error('❌ Error ejecutando migraciones. El servidor NO se iniciará.');
+      process.exit(1);
+    }
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error('❌ Error al iniciar el servidor:', error);
+  process.exit(1);
 });
