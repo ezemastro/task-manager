@@ -13,6 +13,9 @@ import CompletedProjectsView from './components/CompletedProjectsView';
 import PausedProjectsView from './components/PausedProjectsView';
 import AuditLogsView from './components/AuditLogsView';
 import LoginPage from './components/LoginPage';
+import VerifyEmailPage from './components/VerifyEmailPage';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
@@ -20,6 +23,9 @@ function App() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/*"
           element={

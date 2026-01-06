@@ -16,8 +16,10 @@
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^7.0.12",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
@@ -27,6 +29,7 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.7.0",
+    "@types/nodemailer": "^7.0.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -39,12 +40,14 @@ interface LoginResponse {
 }
 
 export default function LoginPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [step, setStep] = useState<'auth' | 'selectOrg' | 'createOrg'>('auth');
   
   // Paso 1: Autenticación
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   
   // Paso 2: Selección de organización
@@ -74,6 +77,10 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        // Si el email no está verificado, mostrar botón para reenviar
+        if (data.requiresEmailVerification) {
+          throw new Error(data.error + ' Revisa tu bandeja de entrada.');
+        }
         throw new Error(data.error || 'Error al iniciar sesión');
       }
 
@@ -97,8 +104,13 @@ export default function LoginPage() {
   };
 
   const handleRegister = async () => {
-    if (!email || !password || !name) {
+    if (!email || !password || !confirmPassword || !name) {
       setError('Todos los campos son requeridos');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden');
       return;
     }
 
@@ -118,7 +130,15 @@ export default function LoginPage() {
         throw new Error(data.error || 'Error al registrarse');
       }
 
-      // Después del registro, iniciar sesión automáticamente
+      // Si requiere verificación, mostrar mensaje
+      if (data.requiresEmailVerification) {
+        setError(''); // Limpiar error
+        alert('Cuenta creada exitosamente. Por favor verifica tu email antes de iniciar sesión.');
+        setMode('login'); // Cambiar a modo login
+        return;
+      }
+
+      // Si no requiere verificación (caso raro), iniciar sesión automáticamente
       await handleLogin();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrarse');
@@ -256,11 +276,33 @@ export default function LoginPage() {
                     disabled={loading}
                     helperText={mode === 'register' ? 'Mínimo 6 caracteres' : ''}
                     onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        mode === 'login' ? handleLogin() : handleRegister();
+                      if (e.key === 'Enter' && mode === 'login') {
+                        handleLogin();
                       }
                     }}
                   />
+
+                  {mode === 'register' && (
+                    <TextField
+                      fullWidth
+                      type="password"
+                      label="Repetir contraseña"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={loading}
+                      error={confirmPassword !== '' && password !== confirmPassword}
+                      helperText={
+                        confirmPassword !== '' && password !== confirmPassword
+                          ? 'Las contraseñas no coinciden'
+                          : ''
+                      }
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleRegister();
+                        }
+                      }}
+                    />
+                  )}
 
                   <Button
                     fullWidth
@@ -277,6 +319,18 @@ export default function LoginPage() {
                       'Registrarse'
                     )}
                   </Button>
+
+                  {mode === 'login' && (
+                    <Button
+                      fullWidth
+                      variant="text"
+                      size="small"
+                      onClick={() => navigate('/forgot-password')}
+                      disabled={loading}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </Button>
+                  )}
                 </Stack>
               </>
             )}

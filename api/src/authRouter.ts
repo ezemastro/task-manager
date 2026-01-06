@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { db } from './apiRouter';
 import { generateToken, hashPassword, comparePassword } from './auth';
 import { authMiddleware, flexibleAuthMiddleware } from './middleware';
+import { sendVerificationEmail, sendPasswordResetEmail } from './emailService';
+import crypto from 'crypto';
 
 export const authRouter = Router();
 
@@ -27,10 +29,16 @@ authRouter.post('/register', async (req: Request, res: Response) => {
 
   try {
     const passwordHash = await hashPassword(password);
+    
+    // Generar token de verificación
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
 
     db.run(
-      'INSERT INTO accounts (email, password_hash, name) VALUES (?, ?, ?)',
-      [email.toLowerCase().trim(), passwordHash, name.trim()],
+      `INSERT INTO accounts 
+       (email, password_hash, name, email_verified, verification_token, verification_token_expires) 
+       VALUES (?, ?, ?, 0, ?, ?)`,
+      [email.toLowerCase().trim(), passwordHash, name.trim(), verificationToken, verificationExpires.toISOString()],
       function(err) {
         if (err) {
           if (err.message.includes('UNIQUE constraint failed')) {
@@ -40,6 +48,16 @@ authRouter.post('/register', async (req: Request, res: Response) => {
         }
 
         const accountId = this.lastID;
+
+        // Enviar email de verificación
+        sendVerificationEmail(email.toLowerCase().trim(), verificationToken, name.trim())
+          .then(() => {
+            console.log('✅ Email de verificación enviado');
+          })
+          .catch((error) => {
+            console.error('❌ Error al enviar email:', error);
+            // No fallar el registro si el email no se puede enviar
+          });
 
         // Buscar organizaciones donde este email fue invitado
         db.all(
@@ -62,11 +80,12 @@ authRouter.post('/register', async (req: Request, res: Response) => {
             }
 
             res.status(201).json({
-              message: 'Cuenta creada exitosamente',
+              message: 'Cuenta creada exitosamente. Por favor verifica tu email.',
               accountId,
               email: email.toLowerCase().trim(),
               name: name.trim(),
-              organizationCount: invites ? invites.length : 0
+              organizationCount: invites ? invites.length : 0,
+              requiresEmailVerification: true
             });
           }
         );
@@ -103,6 +122,14 @@ authRouter.post('/login', async (req: Request, res: Response) => {
 
       if (!validPassword) {
         return res.status(401).json({ error: 'Email o contraseña incorrectos' });
+      }
+
+      // Verificar si el email está verificado
+      if (!account.email_verified) {
+        return res.status(403).json({ 
+          error: 'Por favor verifica tu email antes de iniciar sesión',
+          requiresEmailVerification: true
+        });
       }
 
       // Buscar organizaciones del usuario
@@ -410,6 +437,214 @@ authRouter.put('/organizations/:orgId', authMiddleware, (req: Request, res: Resp
         name: name.trim(),
         message: 'Organización actualizada exitosamente'
       });
+    }
+  );
+});
+// ==================== VERIFICACIÓN DE EMAIL ====================
+
+// Verificar email
+authRouter.get('/verify-email', (req: Request, res: Response) => {
+  const { token } = req.query;
+
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Token de verificación requerido' });
+  }
+
+  db.get(
+    'SELECT * FROM accounts WHERE verification_token = ?',
+    [token],
+    (err, account: any) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!account) {
+        return res.status(400).json({ error: 'Token de verificación inválido' });
+      }
+
+      // Verificar si el token expiró
+      const now = new Date();
+      const expires = new Date(account.verification_token_expires);
+      if (now > expires) {
+        return res.status(400).json({ error: 'Token de verificación expirado' });
+      }
+
+      // Marcar email como verificado y limpiar token
+      db.run(
+        `UPDATE accounts 
+         SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL 
+         WHERE id = ?`,
+        [account.id],
+        (err) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+
+          res.json({
+            message: 'Email verificado exitosamente',
+            email: account.email
+          });
+        }
+      );
+    }
+  );
+});
+
+// Reenviar email de verificación
+authRouter.post('/resend-verification', (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email requerido' });
+  }
+
+  db.get(
+    'SELECT * FROM accounts WHERE email = ?',
+    [email.toLowerCase().trim()],
+    (err, account: any) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!account) {
+        // No revelar que la cuenta no existe por seguridad
+        return res.json({ message: 'Si la cuenta existe, se enviará un email de verificación' });
+      }
+
+      if (account.email_verified) {
+        return res.status(400).json({ error: 'El email ya está verificado' });
+      }
+
+      // Generar nuevo token
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
+
+      db.run(
+        'UPDATE accounts SET verification_token = ?, verification_token_expires = ? WHERE id = ?',
+        [verificationToken, verificationExpires.toISOString(), account.id],
+        (err) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+
+          // Enviar email
+          sendVerificationEmail(account.email, verificationToken, account.name)
+            .then(() => {
+              res.json({ message: 'Email de verificación enviado' });
+            })
+            .catch((error) => {
+              console.error('Error al enviar email:', error);
+              res.status(500).json({ error: 'Error al enviar email' });
+            });
+        }
+      );
+    }
+  );
+});
+
+// ==================== RECUPERACIÓN DE CONTRASEÑA ====================
+
+// Solicitar recuperación de contraseña
+authRouter.post('/forgot-password', (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email requerido' });
+  }
+
+  db.get(
+    'SELECT * FROM accounts WHERE email = ?',
+    [email.toLowerCase().trim()],
+    (err, account: any) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      // No revelar si la cuenta existe o no por seguridad
+      if (!account) {
+        return res.json({ message: 'Si la cuenta existe, recibirás un email con instrucciones' });
+      }
+
+      // Generar token de reseteo
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+      db.run(
+        'UPDATE accounts SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+        [resetToken, resetExpires.toISOString(), account.id],
+        (err) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+
+          // Enviar email
+          sendPasswordResetEmail(account.email, resetToken, account.name)
+            .then(() => {
+              res.json({ message: 'Si la cuenta existe, recibirás un email con instrucciones' });
+            })
+            .catch((error) => {
+              console.error('Error al enviar email:', error);
+              res.json({ message: 'Si la cuenta existe, recibirás un email con instrucciones' });
+            });
+        }
+      );
+    }
+  );
+});
+
+// Resetear contraseña
+authRouter.post('/reset-password', async (req: Request, res: Response) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token y contraseña son requeridos' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+
+  db.get(
+    'SELECT * FROM accounts WHERE reset_token = ?',
+    [token],
+    async (err, account: any) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!account) {
+        return res.status(400).json({ error: 'Token de reseteo inválido' });
+      }
+
+      // Verificar si el token expiró
+      const now = new Date();
+      const expires = new Date(account.reset_token_expires);
+      if (now > expires) {
+        return res.status(400).json({ error: 'Token de reseteo expirado' });
+      }
+
+      try {
+        const passwordHash = await hashPassword(password);
+
+        // Actualizar contraseña y limpiar token
+        db.run(
+          `UPDATE accounts 
+           SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL 
+           WHERE id = ?`,
+          [passwordHash, account.id],
+          (err) => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+
+            res.json({
+              message: 'Contraseña actualizada exitosamente'
+            });
+          }
+        );
+      } catch (err) {
+        return res.status(500).json({ error: 'Error al procesar la contraseña' });
+      }
     }
   );
 });
