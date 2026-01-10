@@ -1,0 +1,21 @@
+# Robots.txt para sistema de gestión de proyectos
+User-agent: *
+Allow: /
+
+# Prevenir indexación de rutas privadas
+Disallow: /dashboard
+Disallow: /projects
+Disallow: /stages
+Disallow: /clients
+Disallow: /users
+Disallow: /audit-logs
+Disallow: /stage-templates
+
+# Rutas públicas permitidas
+Allow: /login
+Allow: /forgot-password
+Allow: /reset-password
+Allow: /verify-email
+
+# Sitemap
+Sitemap: https://gestion.mastropietro.com.ar/sitemap.xml

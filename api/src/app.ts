@@ -32,11 +32,33 @@ app.use('/api/auth', authRouter);
 // Rutas API (protegidas)
 app.use('/api', apiRouter);
 
+// Headers de seguridad y SEO
+app.use((req: Request, res: Response, next) => {
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Cache control para archivos estáticos
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (req.path === '/robots.txt' || req.path === '/sitemap.xml' || req.path === '/manifest.json') {
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 día
+  } else {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+  
+  next();
+});
+
 // Servir frontend en producción
 const frontendPath = process.env.NODE_ENV === 'production' 
   ? path.join('/app', 'client', 'dist')
   : path.join(__dirname, '..', '..', 'client', 'dist');
 app.use(express.static(frontendPath));
+
+// Manejar rutas de SPA (sin /api)
 app.get(/^(?!\/api).*/, (req: Request, res: Response) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
