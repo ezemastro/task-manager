@@ -233,8 +233,15 @@ export default function AllStagesView() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
+      <Box sx={{ 
+        mb: 3, 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'stretch', sm: 'center' },
+        gap: 2
+      }}>
         <Typography variant="h4" component="h1">
           Etapas en Proceso
         </Typography>
@@ -242,6 +249,7 @@ export default function AllStagesView() {
           variant="outlined"
           startIcon={<FilterListIcon />}
           onClick={() => setShowFilters(!showFilters)}
+          sx={{ width: { xs: '100%', sm: 'auto' } }}
         >
           {showFilters ? 'Ocultar' : 'Mostrar'} Filtros
         </Button>

@@ -258,19 +258,33 @@ export default function ProjectDetail() {
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-        <IconButton onClick={handleBack}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-          {project.name}
-        </Typography>
-        <Stack direction="row" spacing={1}>
+    <Container maxWidth="lg" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
+      <Stack spacing={2} sx={{ mb: 3 }}>
+        {/* Header con título y botón volver */}
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <IconButton onClick={handleBack}>
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h5" component="h1" sx={{ flexGrow: 1 }} noWrap>
+            {project.name}
+          </Typography>
+        </Stack>
+
+        {/* Botones de acción - responsive */}
+        <Stack 
+          direction={{ xs: 'column', sm: 'row' }} 
+          spacing={1}
+          sx={{ 
+            '& > button': { 
+              minWidth: { xs: '100%', sm: 'auto' } 
+            }
+          }}
+        >
           <Button
             variant="outlined"
             startIcon={<EditIcon />}
             onClick={() => setShowEditModal(true)}
+            
           >
             Editar
           </Button>
@@ -279,38 +293,52 @@ export default function ProjectDetail() {
             color="error"
             startIcon={<DeleteIcon />}
             onClick={() => setShowDeleteDialog(true)}
+            
           >
             Eliminar
           </Button>
           {project.status === 'completed' ? (
-            <Stack direction="row" spacing={1}>
+            <>
               <Button
                 variant="outlined"
                 onClick={handleReopenProject}
+                
               >
                 Reabrir Proyecto
               </Button>
-              <Chip label="Completado" color="success" icon={<CheckCircleIcon />} />
-            </Stack>
+              <Chip 
+                label="Completado" 
+                color="success" 
+                icon={<CheckCircleIcon />}
+                sx={{ alignSelf: { xs: 'flex-start', sm: 'center' } }}
+              />
+            </>
           ) : project.status === 'paused' ? (
-            <Stack direction="row" spacing={1}>
+            <>
               <Button
                 variant="outlined"
                 color="success"
                 startIcon={<PlayCircleIcon />}
                 onClick={handleResumeProject}
+                
               >
                 Reactivar Proyecto
               </Button>
-              <Chip label="Paralizado" color="warning" icon={<PauseCircleIcon />} />
-            </Stack>
+              <Chip 
+                label="Paralizado" 
+                color="warning" 
+                icon={<PauseCircleIcon />}
+                sx={{ alignSelf: { xs: 'flex-start', sm: 'center' } }}
+              />
+            </>
           ) : (
-            <Stack direction="row" spacing={1}>
+            <>
               <Button
                 variant="outlined"
                 color="warning"
                 startIcon={<PauseCircleIcon />}
                 onClick={handlePauseProject}
+                
               >
                 Paralizar Proyecto
               </Button>
@@ -319,10 +347,11 @@ export default function ProjectDetail() {
                 color="success"
                 startIcon={<CheckCircleIcon />}
                 onClick={handleCompleteProject}
+                
               >
                 Completar Proyecto
               </Button>
-            </Stack>
+            </>
           )}
         </Stack>
       </Stack>

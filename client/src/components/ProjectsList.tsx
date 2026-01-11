@@ -219,19 +219,31 @@ export default function ProjectsList() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ 
+        mb: 3, 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'stretch', sm: 'center' },
+        gap: 2
+      }}>
         <Typography variant="h4" component="h1">
           Mis Proyectos
         </Typography>
-        <Stack direction="row" spacing={2}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           <Button 
             variant="outlined" 
             startIcon={<FilterListIcon />}
             onClick={() => setShowFilters(!showFilters)}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
             {showFilters ? 'Ocultar' : 'Mostrar'} Filtros
           </Button>
-          <Button variant="contained" onClick={() => setShowCreateProject(true)}>
+          <Button 
+            variant="contained" 
+            onClick={() => setShowCreateProject(true)}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
             + Nueva Obra
           </Button>
         </Stack>
@@ -239,11 +251,11 @@ export default function ProjectsList() {
 
       {/* Panel de Filtros */}
       {showFilters && (
-        <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+        <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
           <Stack spacing={2}>
             {/* Primera fila */}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Box sx={{ flex: '1 1 400px', minWidth: '200px' }}>
+              <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 400px' }, minWidth: { xs: '100%', sm: '200px' } }}>
                 <TextField
                   fullWidth
                   label="Buscar"
@@ -263,7 +275,7 @@ export default function ProjectsList() {
             
             {/* Segunda fila */}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
+              <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 200px' }, minWidth: { xs: '100%', sm: '150px' } }}>
                 <FormControl fullWidth>
                   <InputLabel>Cliente</InputLabel>
                   <Select
@@ -283,7 +295,7 @@ export default function ProjectsList() {
                 </FormControl>
               </Box>
 
-              <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
+              <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 200px' }, minWidth: { xs: '100%', sm: '150px' } }}>
                 <FormControl fullWidth>
                   <InputLabel>Responsable</InputLabel>
                   <Select
@@ -303,7 +315,7 @@ export default function ProjectsList() {
                 </FormControl>
               </Box>
 
-              <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
+              <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 200px' }, minWidth: { xs: '100%', sm: '150px' } }}>
                 <FormControl fullWidth>
                   <InputLabel>Fecha Límite</InputLabel>
                   <Select
@@ -320,7 +332,7 @@ export default function ProjectsList() {
                 </FormControl>
               </Box>
 
-              <Box sx={{ flex: '1 1 200px', minWidth: '150px' }}>
+              <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 200px' }, minWidth: { xs: '100%', sm: '150px' } }}>
                 <FormControl fullWidth>
                   <InputLabel>Ordenar por</InputLabel>
                   <Select

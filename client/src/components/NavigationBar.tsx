@@ -17,6 +17,14 @@ import {
   Alert,
   Chip,
   CircularProgress,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
@@ -33,6 +41,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import EditIcon from '@mui/icons-material/Edit';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import AddIcon from '@mui/icons-material/Add';
+import MenuIcon from '@mui/icons-material/Menu';
 import { apiClient, type AuthUser } from '../services/apiClient';
 
 interface Organization {
@@ -44,6 +53,9 @@ interface Organization {
 export default function NavigationBar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [orgAnchorEl, setOrgAnchorEl] = useState<null | HTMLElement>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -284,32 +296,73 @@ export default function NavigationBar() {
     }
   };
 
+  const menuItems = [
+    { path: '/', label: 'Proyectos', icon: <HomeIcon /> },
+    { path: '/stages', label: 'Etapas en Proceso', icon: <ViewListIcon /> },
+    { path: '/completed-projects', label: 'Obras Completadas', icon: <CheckCircleIcon /> },
+    { path: '/paused-projects', label: 'Obras Paralizadas', icon: <PauseCircleIcon /> },
+    { path: '/users-management', label: 'Usuarios', icon: <ManageAccountsIcon /> },
+    { path: '/clients-management', label: 'Clientes', icon: <BusinessIcon /> },
+    { path: '/stage-templates', label: 'Etapas Predefinidas', icon: <LayersIcon /> },
+    { path: '/audit-logs', label: 'Historial', icon: <LayersIcon /> },
+  ];
+
+  const handleMobileMenuToggle = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
+  };
+
+  const handleMobileMenuClose = () => {
+    setMobileMenuOpen(false);
+  };
+
   return (
     <>
       <AppBar position="sticky">
         <Toolbar>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 4 }}>
-            <Typography variant="h6" component="div">
-              {user?.organizationName || 'Gestión de Obras'}
-            </Typography>
+          {/* Botón hamburguesa para móviles */}
+          {isMobile && (
             <IconButton
-              size="small"
               color="inherit"
-              onClick={handleOrgDialogOpen}
+              edge="start"
+              onClick={handleMobileMenuToggle}
+              sx={{ mr: 2 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: { xs: 1, md: 4 } }}>
+            <Typography 
+              component="div" 
+              noWrap
               sx={{ 
-                opacity: 0.7,
-                '&:hover': { opacity: 1 }
+                fontSize: { xs: '1rem', md: '1.25rem' },
+                fontWeight: 500
               }}
             >
-              <EditIcon fontSize="small" />
-            </IconButton>
+              {user?.organizationName || 'Gestión de Obras'}
+            </Typography>
+            {!isMobile && (
+              <IconButton
+                size="small"
+                color="inherit"
+                onClick={handleOrgDialogOpen}
+                sx={{ 
+                  opacity: 0.7,
+                  '&:hover': { opacity: 1 }
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            )}
             <Chip
               icon={<SwapHorizIcon />}
-              label="Cambiar"
+              label={isMobile ? "" : "Cambiar"}
               onClick={handleOrgMenuOpen}
               size="small"
               sx={{
                 ml: 1,
+                minWidth: isMobile ? 32 : 'auto',
                 bgcolor: 'rgba(255, 255, 255, 0.2)',
                 color: 'white',
                 '&:hover': {
@@ -317,138 +370,36 @@ export default function NavigationBar() {
                 },
                 '& .MuiChip-icon': {
                   color: 'white',
+                  ml: isMobile ? '4px' : 0,
+                },
+                '& .MuiChip-label': {
+                  display: isMobile ? 'none' : 'block',
                 },
               }}
             />
           </Box>
 
-        <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
-          <Button
-            component={RouterLink}
-            to="/"
-            color="inherit"
-            startIcon={<HomeIcon />}
-            variant={isActive('/') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Proyectos
-          </Button>
-
-          <Button
-            component={RouterLink}
-            to="/stages"
-            color="inherit"
-            startIcon={<ViewListIcon />}
-            variant={isActive('/stages') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Etapas en Proceso
-          </Button>
-
-          <Button
-            component={RouterLink}
-            to="/completed-projects"
-            color="inherit"
-            startIcon={<CheckCircleIcon />}
-            variant={isActive('/completed-projects') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Obras Completadas
-          </Button>
-
-          <Button
-            component={RouterLink}
-            to="/paused-projects"
-            color="inherit"
-            startIcon={<PauseCircleIcon />}
-            variant={isActive('/paused-projects') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Obras Paralizadas
-          </Button>
-
-          {/* <Button
-            component={RouterLink}
-            to="/users"
-            color="inherit"
-            startIcon={<PeopleIcon />}
-            variant={isActive('/users') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Panel Usuarios
-          </Button> */}
-
-          <Button
-            component={RouterLink}
-            to="/users-management"
-            color="inherit"
-            startIcon={<ManageAccountsIcon />}
-            variant={isActive('/users-management') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Usuarios
-          </Button>
-
-          <Button
-            component={RouterLink}
-            to="/clients-management"
-            color="inherit"
-            startIcon={<BusinessIcon />}
-            variant={isActive('/clients-management') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Clientes
-          </Button>
-
-          <Button
-            component={RouterLink}
-            to="/stage-templates"
-            color="inherit"
-            startIcon={<LayersIcon />}
-            variant={isActive('/stage-templates') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Etapas Predefinidas
-          </Button>
-
-          <Button
-            component={RouterLink}
-            to="/audit-logs"
-            color="inherit"
-            startIcon={<LayersIcon />}
-            variant={isActive('/audit-logs') ? 'outlined' : 'text'}
-            sx={{ 
-              borderColor: 'white',
-              '&:hover': { borderColor: 'white' }
-            }}
-          >
-            Historial
-          </Button>
-        </Box>
+        {/* Menú desktop */}
+        {!isMobile && (
+          <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
+            {menuItems.map((item) => (
+              <Button
+                key={item.path}
+                component={RouterLink}
+                to={item.path}
+                color="inherit"
+                startIcon={item.icon}
+                variant={isActive(item.path) ? 'outlined' : 'text'}
+                sx={{ 
+                  borderColor: 'white',
+                  '&:hover': { borderColor: 'white' }
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </Box>
+        )}
 
         <IconButton
           color="inherit"
@@ -535,6 +486,100 @@ export default function NavigationBar() {
         </Menu>
       </Toolbar>
     </AppBar>
+
+    {/* Drawer móvil */}
+    <Drawer
+      anchor="left"
+      open={mobileMenuOpen}
+      onClose={handleMobileMenuClose}
+    >
+      <Box sx={{ width: 280 }}>
+        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+          <Typography variant="h6" gutterBottom>
+            {user?.organizationName || 'Gestión de Obras'}
+          </Typography>
+          <Typography variant="body2" sx={{ opacity: 0.9 }}>
+            {user?.email}
+          </Typography>
+          <Box sx={{ mt: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
+            <IconButton
+              size="small"
+              onClick={() => {
+                handleOrgDialogOpen();
+                handleMobileMenuClose();
+              }}
+              sx={{ 
+                color: 'white',
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.3)' }
+              }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+            <Chip
+              icon={<SwapHorizIcon />}
+              label="Cambiar Organización"
+              onClick={(e: any) => {
+                handleOrgMenuOpen(e);
+                handleMobileMenuClose();
+              }}
+              size="small"
+              sx={{
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                color: 'white',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                },
+                '& .MuiChip-icon': {
+                  color: 'white',
+                },
+              }}
+            />
+          </Box>
+        </Box>
+        
+        <Divider />
+        
+        <List>
+          {menuItems.map((item) => (
+            <ListItem key={item.path} disablePadding>
+              <ListItemButton
+                component={RouterLink}
+                to={item.path}
+                selected={isActive(item.path)}
+                onClick={handleMobileMenuClose}
+              >
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+        
+        <Divider />
+        
+        <List>
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => {
+              handlePasswordDialogOpen();
+              handleMobileMenuClose();
+            }}>
+              <ListItemIcon><LockIcon /></ListItemIcon>
+              <ListItemText primary="Cambiar Contraseña" />
+            </ListItemButton>
+          </ListItem>
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => {
+              handleLogout();
+              handleMobileMenuClose();
+            }}>
+              <ListItemIcon><LogoutIcon /></ListItemIcon>
+              <ListItemText primary="Cerrar Sesión" />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+    </Drawer>
 
     <Dialog open={showPasswordDialog} onClose={handlePasswordDialogClose} maxWidth="sm" fullWidth>
       <DialogTitle>Cambiar Contraseña</DialogTitle>

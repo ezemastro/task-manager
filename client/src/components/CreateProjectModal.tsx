@@ -13,6 +13,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { apiClient, type CreateProjectRequest, type Client, type User } from '../services/apiClient';
@@ -30,6 +32,8 @@ export default function CreateProjectModal({
   onClose, 
   onSuccess 
 }: CreateProjectModalProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [formData, setFormData] = useState<CreateProjectRequest>({
     name: '',
     description: '',
@@ -173,6 +177,7 @@ export default function CreateProjectModal({
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
+      fullScreen={isMobile}
     >
       <DialogTitle>
         Crear Nueva Obra

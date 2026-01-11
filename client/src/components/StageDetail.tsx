@@ -460,98 +460,135 @@ export default function StageDetail() {
   );
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-        <IconButton onClick={handleBack} aria-label="Volver">
-          <ArrowBackIcon />
-        </IconButton>
-        <Box sx={{ flexGrow: 1 }}>
-          {editingName ? (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <TextField
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                size="small"
-                autoFocus
-                fullWidth
-              />
-              <IconButton color="primary" onClick={handleSaveName} size="small">
-                <SaveIcon />
-              </IconButton>
-              <IconButton onClick={() => setEditingName(false)} size="small">
-                <CloseIcon />
-              </IconButton>
-            </Stack>
-          ) : (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h4" component="h1">
-                {stage.name}
-              </Typography>
-              <IconButton size="small" onClick={startEditingName}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          )}
-          {stage.project_name && stage.project_id && (
-            <Typography variant="h6" color="text.secondary">
-              Proyecto:{' '}
-              <Link
-                component={RouterLink}
-                to={`/projects/${stage.project_id}`}
-                sx={{
-                  color: 'primary.main',
-                  textDecoration: 'none',
-                  fontSize: 'inherit',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
+    <Container maxWidth="lg" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
+      <Stack spacing={2} sx={{ mb: 3 }}>
+        {/* Header con título y botón volver */}
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <IconButton onClick={handleBack} aria-label="Volver">
+            <ArrowBackIcon />
+          </IconButton>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            {editingName ? (
+              <Stack direction="row" spacing={1} alignItems="center">
+                <TextField
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  size="small"
+                  autoFocus
+                  fullWidth
+                />
+                <IconButton color="primary" onClick={handleSaveName} size="small">
+                  <SaveIcon />
+                </IconButton>
+                <IconButton onClick={() => setEditingName(false)} size="small">
+                  <CloseIcon />
+                </IconButton>
+              </Stack>
+            ) : (
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography 
+                  component="h1"
+                  sx={{ 
+                    fontSize: { xs: '1.5rem', sm: '2.125rem' },
+                    fontWeight: 400,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: { xs: 'nowrap', sm: 'normal' }
+                  }}
+                >
+                  {stage.name}
+                </Typography>
+                <IconButton size="small" onClick={startEditingName}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Stack>
+            )}
+            {stage.project_name && stage.project_id && (
+              <Typography 
+                color="text.secondary"
+                sx={{ 
+                  fontSize: { xs: '0.875rem', sm: '1.25rem' },
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: { xs: 'nowrap', sm: 'normal' }
                 }}
               >
-                {stage.project_name}
-              </Link>
-            </Typography>
-          )}
-        </Box>
-        <Chip
-          label={`Etapa ${stage.order_number}`}
-          color="default"
-          variant="outlined"
-        />
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<DeleteIcon />}
-          onClick={() => setShowDeleteDialog(true)}
+                Proyecto:{' '}
+                <Link
+                  component={RouterLink}
+                  to={`/projects/${stage.project_id}`}
+                  sx={{
+                    color: 'primary.main',
+                    textDecoration: 'none',
+                    fontSize: 'inherit',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  }}
+                >
+                  {stage.project_name}
+                </Link>
+              </Typography>
+            )}
+          </Box>
+          <Chip
+            label={`Etapa ${stage.order_number}`}
+            color="default"
+            variant="outlined"
+            sx={{ display: { xs: 'none', sm: 'flex' } }}
+          />
+        </Stack>
+
+        {/* Botones de acción - responsive */}
+        <Stack 
+          direction={{ xs: 'column', sm: 'row' }} 
+          spacing={1}
+          sx={{ 
+            '& > button': { 
+              minWidth: { xs: '100%', sm: 'auto' } 
+            }
+          }}
         >
-          Eliminar
-        </Button>
-        {stage.start_date && !stage.is_completed && (
           <Button
             variant="outlined"
-            color="info"
-            onClick={handleUnstartStage}
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={() => setShowDeleteDialog(true)}
+            
           >
-            ← Volver a No Iniciada
+            Eliminar
           </Button>
-        )}
-        {!stage.is_completed ? (
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<CheckCircleIcon />}
-            onClick={handleCompleteStage}
-          >
-            Marcar como Completada
-          </Button>
-        ) : (
-          <Button
-            variant="outlined"
-            color="warning"
-            onClick={handleUncompleteStage}
-          >
-            ↺ Reabrir Etapa
-          </Button>
-        )}
+          {stage.start_date && !stage.is_completed && (
+            <Button
+              variant="outlined"
+              color="info"
+              onClick={handleUnstartStage}
+              
+            >
+              ← Volver a No Iniciada
+            </Button>
+          )}
+          {!stage.is_completed ? (
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<CheckCircleIcon />}
+              onClick={handleCompleteStage}
+              
+            >
+              Marcar como Completada
+            </Button>
+          ) : (
+            <Button
+              variant="outlined"
+              color="warning"
+              onClick={handleUncompleteStage}
+              
+            >
+              ↺ Reabrir Etapa
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
       {error && (
