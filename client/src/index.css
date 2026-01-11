@@ -14,7 +14,8 @@ body {
 input,
 textarea,
 select {
-  font-size: 16px !important; /* Previene zoom en iOS */
+  font-size: 16px !important;
+  /* Previene zoom en iOS */
 }
 
 /* Mejora el scroll en móviles */
