@@ -36,24 +36,26 @@ export default function Footer() {
             >
               Open Source •{' '}
               <Link
-                href="mailto:marcelo@mastropietro.com"
+                href="mailto:consultas@mastropietro.com.ar"
                 color="inherit"
                 underline="hover"
+                title="Enviar email a consultas@mastropietro.com.ar"
               >
-                ¿Dudas, sugerencias o errores?
+                consultas@mastropietro.com.ar
               </Link>
             </Typography>
-            <Link
-              href="mailto:marcelo@mastropietro.com"
+            <IconButton
+              component="a"
+              href="mailto:consultas@mastropietro.com.ar"
+              size="small"
+              title="Enviar email a consultas@mastropietro.com.ar"
               sx={{ 
-                display: 'flex',
-                alignItems: 'center',
                 color: 'text.secondary',
                 '&:hover': { color: 'primary.main' }
               }}
             >
               <EmailIcon sx={{ fontSize: 16 }} />
-            </Link>
+            </IconButton>
           </Stack>
 
           {/* Derecha: GitHub */}
