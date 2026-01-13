@@ -1,6 +1,6 @@
-# Sistema de Gestión de Proyectos de Construcción
+# Sistema de Gestión de Proyectos
 
-Sistema full-stack para la gestión de proyectos de obras de construcción con etapas secuenciales, usuarios, tags y comentarios. Con soporte para multi-tenancy, autenticación JWT y despliegue en Docker.
+Sistema full-stack para la gestión de proyectos con etapas secuenciales, usuarios, tags y comentarios. Con soporte para multi-tenancy, autenticación JWT y despliegue en Docker.
 
 ## 🐳 Despliegue con Docker
 
@@ -86,7 +86,7 @@ docker run -d -p 3000:3000 -v task-manager-data:/app/data tu-usuario/task-manage
    - `role` TEXT (opcional)
    - `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
 
-2. **projects** - Proyectos/Obras
+2. **projects** - Proyectos
    - `id` INTEGER PRIMARY KEY AUTOINCREMENT
    - `name` TEXT NOT NULL
    - `description` TEXT
@@ -259,7 +259,7 @@ Contenedor principal que lista todos los proyectos.
 
 **Características:**
 - Carga todos los proyectos con sus etapas
-- Botón para crear nueva obra
+- Botón para crear nuevo proyecto
 - Callbacks de actualización
 
 ### `ProjectCard`
@@ -352,7 +352,7 @@ El servidor arranca en `http://localhost:3000`
 1. Juan Pérez - Ingeniero Civil
 2. María García - Ingeniera de Suelos
 3. Carlos Rodríguez - Arquitecto
-4. Ana Martínez - Jefa de Obra
+4. Ana Martínez - Jefa de Proyecto
 5. Luis Fernández - Supervisor de Seguridad
 
 ### 3. Iniciar el frontend
@@ -366,7 +366,7 @@ El cliente arranca en `http://localhost:5173`
 
 ## 🎯 Flujo de Trabajo
 
-1. **Crear Proyecto**: Click en "Nueva Obra" → Llenar formulario
+1. **Crear Proyecto**: Click en "Nuevo Proyecto" → Llenar formulario
 2. **Crear Primera Etapa**: Click en "Iniciar Nueva Etapa" → Seleccionar responsable
 3. **Completar Etapa**: Click en "Marcar como Completada" (solo en etapa actual)
 4. **Crear Siguiente Etapa**: Solo disponible cuando la anterior está completada
@@ -389,7 +389,7 @@ El cliente arranca en `http://localhost:5173`
 ## 📄 Documentación Adicional
 
 - [`client/README_API_CLIENT.md`](./client/README_API_CLIENT.md) - Documentación detallada del cliente API
-- [`client/FORMULARIO_OBRAS.md`](./client/FORMULARIO_OBRAS.md) - Especificación del formulario de obras
+- [`client/FORMULARIO_PROYECTOS.md`](./client/FORMULARIO_PROYECTOS.md) - Especificación del formulario de proyectos
 - [`client/COMPONENTES_CARDS.md`](./client/COMPONENTES_CARDS.md) - Especificación de las cards
 
 ## 🐛 Troubleshooting

@@ -299,8 +299,8 @@ export default function NavigationBar() {
   const menuItems = [
     { path: '/', label: 'Proyectos', icon: <HomeIcon /> },
     { path: '/stages', label: 'Etapas en Proceso', icon: <ViewListIcon /> },
-    { path: '/completed-projects', label: 'Obras Completadas', icon: <CheckCircleIcon /> },
-    { path: '/paused-projects', label: 'Obras Paralizadas', icon: <PauseCircleIcon /> },
+    { path: '/completed-projects', label: 'Proyectos Completados', icon: <CheckCircleIcon /> },
+    { path: '/paused-projects', label: 'Proyectos Paralizados', icon: <PauseCircleIcon /> },
     { path: '/users-management', label: 'Usuarios', icon: <ManageAccountsIcon /> },
     { path: '/clients-management', label: 'Clientes', icon: <BusinessIcon /> },
     { path: '/stage-templates', label: 'Etapas Predefinidas', icon: <LayersIcon /> },
@@ -340,7 +340,7 @@ export default function NavigationBar() {
                 fontWeight: 500
               }}
             >
-              {user?.organizationName || 'Gestión de Obras'}
+              {user?.organizationName || 'Gestión de Proyectos'}
             </Typography>
             {!isMobile && (
               <IconButton
@@ -496,7 +496,7 @@ export default function NavigationBar() {
       <Box sx={{ width: 280 }}>
         <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
           <Typography variant="h6" gutterBottom>
-            {user?.organizationName || 'Gestión de Obras'}
+            {user?.organizationName || 'Gestión de Proyectos'}
           </Typography>
           <Typography variant="body2" sx={{ opacity: 0.9 }}>
             {user?.email}

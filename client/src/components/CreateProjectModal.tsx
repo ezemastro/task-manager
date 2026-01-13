@@ -76,7 +76,7 @@ export default function CreateProjectModal({
     const newErrors: { name?: string; description?: string } = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre de la obra es requerido';
+      newErrors.name = 'El nombre del proyecto es requerido';
     } else if (formData.name.length < 3) {
       newErrors.name = 'El nombre debe tener al menos 3 caracteres';
     } else if (formData.name.length > 100) {
@@ -141,7 +141,7 @@ export default function CreateProjectModal({
       }
       onClose();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al crear la obra';
+      const message = error instanceof Error ? error.message : 'Error al crear el proyecto';
       setErrorMessage(message);
     } finally {
       setLoading(false);
@@ -180,7 +180,7 @@ export default function CreateProjectModal({
       fullScreen={isMobile}
     >
       <DialogTitle>
-        Crear Nueva Obra
+        Crear Nuevo Proyecto
       </DialogTitle>
 
       <DialogContent>
@@ -237,7 +237,7 @@ export default function CreateProjectModal({
           <TextField
             fullWidth
             required
-            label="Nombre de la Obra"
+            label="Nombre del Proyecto"
             name="name"
             value={formData.name}
             onChange={handleChange('name')}
@@ -281,7 +281,7 @@ export default function CreateProjectModal({
             slotProps={{
               inputLabel: { shrink: true }
             }}
-            helperText="Fecha límite para completar la obra"
+            helperText="Fecha límite para completar el proyecto"
           />
 
           {errorMessage && (
@@ -310,7 +310,7 @@ export default function CreateProjectModal({
               Creando...
             </>
           ) : (
-            'Crear Obra'
+            'Crear Proyecto'
           )}
         </Button>
       </DialogActions>

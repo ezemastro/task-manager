@@ -244,7 +244,7 @@ export default function ProjectsList() {
             onClick={() => setShowCreateProject(true)}
             sx={{ width: { xs: '100%', sm: 'auto' } }}
           >
-            + Nueva Obra
+            + Nuevo Proyecto
           </Button>
         </Stack>
       </Box>
@@ -412,7 +412,7 @@ export default function ProjectsList() {
       {filteredAndSortedProjects.length === 0 ? (
         <Alert severity="info">
           {projects.length === 0 
-            ? 'No hay proyectos creados. Comienza creando tu primera obra.'
+            ? 'No hay proyectos creados. Comienza creando tu primer proyecto.'
             : 'No se encontraron proyectos con los filtros aplicados.'}
         </Alert>
       ) : (

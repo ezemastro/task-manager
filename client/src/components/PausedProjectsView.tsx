@@ -137,10 +137,10 @@ export default function PausedProjectsView() {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-          Obras Paralizadas
+          Proyectos Paralizados
         </Typography>
         <Chip 
-          label={`${projects.length} ${projects.length === 1 ? 'obra' : 'obras'}`} 
+          label={`${projects.length} ${projects.length === 1 ? 'proyecto' : 'proyectos'}`} 
           color="warning"
           icon={<PauseCircleIcon />}
         />

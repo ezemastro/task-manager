@@ -3,7 +3,7 @@ import type { Transporter } from 'nodemailer';
 
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const FROM_EMAIL = process.env.FROM_EMAIL || process.env.SMTP_USER || 'noreply@tudominio.com';
-const FROM_NAME = process.env.FROM_NAME || 'Gestión de Obras';
+const FROM_NAME = process.env.FROM_NAME || 'Gestión de Proyectos';
 
 let transporter: Transporter | null = null;
 
@@ -56,11 +56,11 @@ export async function sendVerificationEmail(email: string, token: string, name: 
   const mailOptions = {
     from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
     to: email,
-    subject: 'Verifica tu cuenta - Gestión de Obras',
+    subject: 'Verifica tu cuenta - Gestión de Proyectos',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1976d2;">¡Bienvenido/a ${name}!</h2>
-        <p>Gracias por registrarte en Gestión de Obras.</p>
+        <p>Gracias por registrarte en Gestión de Proyectos.</p>
         <p>Para activar tu cuenta, por favor haz clic en el siguiente botón:</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${verificationUrl}" 
@@ -105,7 +105,7 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
   const mailOptions = {
     from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
     to: email,
-    subject: 'Recuperación de contraseña - Gestión de Obras',
+    subject: 'Recuperación de contraseña - Gestión de Proyectos',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1976d2;">Recuperación de contraseña</h2>

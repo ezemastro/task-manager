@@ -97,7 +97,7 @@ function initializeDatabase() {
       )
     `);
 
-    // Tabla de proyectos/obras
+    // Tabla de proyectos
     db.run(`
       CREATE TABLE IF NOT EXISTS projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,7 +230,7 @@ function initializeDatabase() {
     //     const defaultUsers = [
     //       ['Juan Pérez', 'juan.perez@example.com', 'Ingeniero Civil'],
     //       ['María García', 'maria.garcia@example.com', 'Arquitecta'],
-    //       ['Carlos Rodríguez', 'carlos.rodriguez@example.com', 'Jefe de Obra'],
+    //       ['Carlos Rodríguez', 'carlos.rodriguez@example.com', 'Gerente de Proyecto'],
     //       ['Ana Martínez', 'ana.martinez@example.com', 'Ingeniera'],
     //       ['Luis Fernández', 'luis.fernandez@example.com', 'Supervisor'],
     //     ];

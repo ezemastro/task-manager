@@ -69,7 +69,7 @@ Para que los emails se envíen realmente, necesitas configurar uno de estos:
 ```env
 RESEND_API_KEY=re_tu_clave_aqui
 FROM_EMAIL=noreply@tudominio.com
-FROM_NAME=Gestión de Obras
+FROM_NAME=Gestión de Proyectos
 APP_URL=https://tuapp.com
 ```
 
@@ -89,7 +89,7 @@ SMTP_PORT=587
 SMTP_USER=tu-email@gmail.com
 SMTP_PASS=tu-contraseña-de-aplicacion
 FROM_EMAIL=tu-email@gmail.com
-FROM_NAME=Gestión de Obras
+FROM_NAME=Gestión de Proyectos
 APP_URL=https://tuapp.com
 ```
 
@@ -167,7 +167,7 @@ Si no configuras nada:
      environment:
        - RESEND_API_KEY=re_tu_clave_aqui
        - FROM_EMAIL=noreply@tudominio.com
-       - FROM_NAME=Gestión de Obras
+       - FROM_NAME=Gestión de Proyectos
        - APP_URL=https://tudominio.com
    ```
 

@@ -206,6 +206,6 @@ Si encuentras algún problema durante la migración:
 - Responsables por defecto en plantillas
 
 ### v1.2.0 (Anterior)
-- Sistema de gestión de obras básico
+- Sistema de gestión de proyectos básico
 - Sin autenticación
 - Base de datos única sin organizaciones

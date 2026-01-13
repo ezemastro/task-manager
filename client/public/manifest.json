@@ -1,7 +1,7 @@
 {
   "name": "Sistema de Gestión de Proyectos",
   "short_name": "Gestión Proyectos",
-  "description": "Sistema integral de gestión de proyectos, obras y etapas",
+  "description": "Sistema integral de gestión de proyectos y etapas",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

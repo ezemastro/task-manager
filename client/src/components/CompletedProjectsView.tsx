@@ -136,10 +136,10 @@ export default function CompletedProjectsView() {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-          Obras Completadas
+          Proyectos Completados
         </Typography>
         <Chip 
-          label={`${projects.length} ${projects.length === 1 ? 'obra' : 'obras'}`} 
+          label={`${projects.length} ${projects.length === 1 ? 'proyecto' : 'proyectos'}`} 
           color="success" 
         />
       </Stack>

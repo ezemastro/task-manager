@@ -330,7 +330,7 @@ function CreateUserModal({ open, onClose, onSuccess }: CreateUserModalProps) {
             label="Rol / Cargo"
             value={formData.role}
             onChange={handleChange('role')}
-            helperText="Ej: Ingeniero Civil, Arquitecto, Jefe de Obra (opcional)"
+            helperText="Ej: Ingeniero, Arquitecto, Gerente de Proyecto (opcional)"
             disabled={loading}
           />
 
@@ -472,7 +472,7 @@ function EditUserModal({ open, onClose, onSuccess, user }: EditUserModalProps) {
             label="Rol / Cargo"
             value={formData.role}
             onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-            helperText="Ej: Ingeniero Civil, Arquitecto, Jefe de Obra (opcional)"
+            helperText="Ej: Ingeniero, Arquitecto, Gerente de Proyecto (opcional)"
             disabled={loading}
           />
 

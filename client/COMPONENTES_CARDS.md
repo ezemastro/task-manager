@@ -1,9 +1,9 @@
-# Componentes de Cards - Obras y Etapas
+# Componentes de Cards - Proyectos y Etapas
 
 ## 📋 Componentes Creados
 
-### 1. **ProjectCard** - Card de Proyecto/Obra
-Componente principal que muestra toda la información de una obra con sus etapas.
+### 1. **ProjectCard** - Card de Proyecto
+Componente principal que muestra toda la información de un proyecto con sus etapas.
 
 **Ubicación:** `/src/components/ProjectCard.tsx`
 
@@ -20,7 +20,7 @@ Componente principal que muestra toda la información de una obra con sus etapas
 ```typescript
 interface ProjectCardProps {
   projectId: number;              // ID del proyecto
-  projectName: string;             // Nombre de la obra
+  projectName: string;             // Nombre del proyecto
   projectDescription?: string;     // Descripción (opcional)
   stages: Stage[];                 // Array de etapas
   onStageCompleted?: () => void;   // Callback cuando se completa una etapa
@@ -137,7 +137,7 @@ Componente contenedor que carga y muestra todos los proyectos con sus etapas.
 - ✅ Loading state con spinner
 - ✅ Manejo de errores con opción de reintentar
 - ✅ Botón de actualizar manual
-- ✅ Botón para crear nueva obra (modal)
+- ✅ Botón para crear nuevo proyecto (modal)
 - ✅ Mensaje cuando no hay proyectos
 - ✅ Renderiza ProjectCard para cada proyecto
 
@@ -280,7 +280,7 @@ const handleRefresh = () => {
 
 ### Vacío
 - Mensaje informativo
-- Botón para crear primera obra/etapa
+- Botón para crear primer proyecto/etapa
 
 ---
 
@@ -333,7 +333,7 @@ npm run dev
 
 3. Flujo de prueba:
    - Ir a "Ver Mis Proyectos"
-   - Crear nueva obra
+   - Crear nuevo proyecto
    - Iniciar primera etapa
    - Completar etapa
    - Crear siguiente etapa

@@ -88,7 +88,7 @@ export default function EditProjectModal({
     const newErrors: { name?: string; description?: string } = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre de la obra es requerido';
+      newErrors.name = 'El nombre del proyecto es requerido';
     } else if (formData.name.length < 3) {
       newErrors.name = 'El nombre debe tener al menos 3 caracteres';
     } else if (formData.name.length > 100) {
@@ -125,7 +125,7 @@ export default function EditProjectModal({
       }
       onClose();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al actualizar la obra';
+      const message = error instanceof Error ? error.message : 'Error al actualizar el proyecto';
       setErrorMessage(message);
     } finally {
       setLoading(false);
@@ -163,7 +163,7 @@ export default function EditProjectModal({
       fullWidth
     >
       <DialogTitle>
-        Editar Obra
+        Editar Proyecto
       </DialogTitle>
 
       <DialogContent>
@@ -207,7 +207,7 @@ export default function EditProjectModal({
           <TextField
             autoFocus
             margin="normal"
-            label="Nombre de la Obra"
+            label="Nombre del Proyecto"
             fullWidth
             required
             value={formData.name}

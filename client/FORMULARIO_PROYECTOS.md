@@ -1,4 +1,4 @@
-# Componentes de Formulario - Crear Obra
+# Componentes de Formulario - Crear Proyecto
 
 ## 📋 Componentes Creados
 
@@ -30,7 +30,7 @@ import CreateProjectForm from './components/CreateProjectForm';
 
 function MyComponent() {
   const handleSuccess = (projectId: number) => {
-    console.log('Obra creada:', projectId);
+    console.log('Proyecto creado:', projectId);
     // Redirigir, actualizar lista, etc.
   };
 
@@ -46,7 +46,7 @@ function MyComponent() {
 ---
 
 ### 2. **CreateProjectModal** (Modal/Dialog)
-Modal compacto para crear obra sin salir de la página actual.
+Modal compacto para crear proyecto sin salir de la página actual.
 
 **Ubicación:** `/src/components/CreateProjectModal.tsx`
 
@@ -77,14 +77,14 @@ function MyComponent() {
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        Nueva Obra
+        Nuevo Proyecto
       </Button>
 
       <CreateProjectModal
         open={open}
         onClose={() => setOpen(false)}
         onSuccess={(id) => {
-          console.log('Obra creada:', id);
+          console.log('Proyecto creado:', id);
           setOpen(false);
         }}
       />
@@ -141,7 +141,7 @@ import { apiClient, type CreateProjectRequest } from '../services/apiClient';
 
 // Dentro del componente
 const result = await apiClient.createProject({
-  name: 'Mi Obra',
+  name: 'Mi Proyecto',
   description: 'Descripción opcional'
 });
 
@@ -219,7 +219,7 @@ La aplicación incluye:
 
 1. Usuario abre formulario o modal
 2. Completa campos (validación en tiempo real)
-3. Click en "Crear Obra"
+3. Click en "Crear Proyecto"
 4. Loading state se activa
 5. Request a la API
 6. Si éxito:

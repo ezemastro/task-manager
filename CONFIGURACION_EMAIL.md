@@ -61,7 +61,7 @@ Este documento explica cómo configurar el envío de emails para verificación y
    ```env
    RESEND_API_KEY=re_tu_clave_aqui
    FROM_EMAIL=onboarding@resend.dev
-   FROM_NAME=Gestión de Obras
+   FROM_NAME=Gestión de Proyectos
    APP_URL=https://tuapp.com
    ```
 
@@ -69,7 +69,7 @@ Este documento explica cómo configurar el envío de emails para verificación y
    ```env
    RESEND_API_KEY=re_tu_clave_aqui
    FROM_EMAIL=noreply@tudominio.com
-   FROM_NAME=Gestión de Obras
+   FROM_NAME=Gestión de Proyectos
    APP_URL=https://tuapp.com
    ```
 
@@ -93,7 +93,7 @@ Si prefieres usar tu cuenta de Gmail:
    SMTP_USER=tu-email@gmail.com
    SMTP_PASS=tu-contraseña-de-aplicacion
    FROM_EMAIL=tu-email@gmail.com
-   FROM_NAME=Gestión de Obras
+   FROM_NAME=Gestión de Proyectos
    APP_URL=https://tuapp.com
    ```
 
@@ -107,7 +107,7 @@ SMTP_PORT=587
 SMTP_USER=noreply@tudominio.com
 SMTP_PASS=tu-contraseña
 FROM_EMAIL=noreply@tudominio.com
-FROM_NAME=Gestión de Obras
+FROM_NAME=Gestión de Proyectos
 APP_URL=https://tuapp.com
 ```
 
@@ -124,7 +124,7 @@ services:
       # Opción 1: Resend
       - RESEND_API_KEY=re_tu_clave_aqui
       - FROM_EMAIL=noreply@tudominio.com
-      - FROM_NAME=Gestión de Obras
+      - FROM_NAME=Gestión de Proyectos
       - APP_URL=https://tuapp.com
 
       # O Opción 2: SMTP
@@ -133,7 +133,7 @@ services:
       # - SMTP_USER=tu-email@gmail.com
       # - SMTP_PASS=tu-contraseña
       # - FROM_EMAIL=tu-email@gmail.com
-      # - FROM_NAME=Gestión de Obras
+      # - FROM_NAME=Gestión de Proyectos
       # - APP_URL=https://tuapp.com
 ```
 
