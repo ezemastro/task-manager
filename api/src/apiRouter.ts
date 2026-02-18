@@ -1701,20 +1701,31 @@ apiRouter.delete('/stages/:id', (req: Request, res: Response) => {
 apiRouter.post('/stages/:id/tags', (req: Request, res: Response) => {
   const { id } = req.params;
   const { tag_id } = req.body;
+  const organizationId = req.user!.organizationId;
 
   if (!tag_id) {
     return res.status(400).json({ error: 'tag_id es requerido' });
   }
 
-  const sql = 'INSERT INTO stage_tags (stage_id, tag_id) VALUES (?, ?)';
-  db.run(sql, [id, tag_id], function (err) {
+  // Verificar que el tag pertenece a la organización del usuario
+  db.get('SELECT id FROM tags WHERE id = ? AND organization_id = ?', [tag_id, organizationId], (err, tag) => {
     if (err) {
-      if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: 'Esta etiqueta ya está asignada a la etapa' });
-      }
       return res.status(500).json({ error: err.message });
     }
-    res.status(201).json({ message: 'Etiqueta añadida a la etapa exitosamente' });
+    if (!tag) {
+      return res.status(404).json({ error: 'Etiqueta no encontrada o no pertenece a tu organización' });
+    }
+
+    const sql = 'INSERT INTO stage_tags (stage_id, tag_id) VALUES (?, ?)';
+    db.run(sql, [id, tag_id], function (err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(400).json({ error: 'Esta etiqueta ya está asignada a la etapa' });
+        }
+        return res.status(500).json({ error: err.message });
+      }
+      res.status(201).json({ message: 'Etiqueta añadida a la etapa exitosamente' });
+    });
   });
 });
 
@@ -1739,21 +1750,23 @@ apiRouter.delete('/stages/:stageId/tags/:tagId', (req: Request, res: Response) =
 // Crear una nueva etiqueta
 apiRouter.post('/tags', (req: Request, res: Response) => {
   const { name, color } = req.body;
+  const organizationId = req.user!.organizationId;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre de la etiqueta es requerido' });
   }
 
-  const sql = 'INSERT INTO tags (name, color) VALUES (?, ?)';
-  db.run(sql, [name, color || null], function (err) {
+  const sql = 'INSERT INTO tags (organization_id, name, color) VALUES (?, ?, ?)';
+  db.run(sql, [organizationId, name, color || null], function (err) {
     if (err) {
       if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: 'Ya existe una etiqueta con ese nombre' });
+        return res.status(400).json({ error: 'Ya existe una etiqueta con ese nombre en tu organización' });
       }
       return res.status(500).json({ error: err.message });
     }
     res.status(201).json({
       id: this.lastID,
+      organization_id: organizationId,
       name,
       color,
       message: 'Etiqueta creada exitosamente'
@@ -1763,17 +1776,20 @@ apiRouter.post('/tags', (req: Request, res: Response) => {
 
 // Obtener todas las etiquetas
 apiRouter.get('/tags', (req: Request, res: Response) => {
+  const organizationId = req.user!.organizationId;
+  
   const sql = `
     SELECT 
       t.*,
       COUNT(DISTINCT st.stage_id) as usage_count
     FROM tags t
     LEFT JOIN stage_tags st ON t.id = st.tag_id
+    WHERE t.organization_id = ?
     GROUP BY t.id
     ORDER BY t.name
   `;
 
-  db.all(sql, [], (err, rows) => {
+  db.all(sql, [organizationId], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1784,9 +1800,10 @@ apiRouter.get('/tags', (req: Request, res: Response) => {
 // Obtener una etiqueta por ID
 apiRouter.get('/tags/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const organizationId = req.user!.organizationId;
 
-  const sql = 'SELECT * FROM tags WHERE id = ?';
-  db.get(sql, [id], (err, row) => {
+  const sql = 'SELECT * FROM tags WHERE id = ? AND organization_id = ?';
+  db.get(sql, [id, organizationId], (err, row) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1801,12 +1818,13 @@ apiRouter.get('/tags/:id', (req: Request, res: Response) => {
 apiRouter.put('/tags/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, color } = req.body;
+  const organizationId = req.user!.organizationId;
 
-  const sql = 'UPDATE tags SET name = COALESCE(?, name), color = COALESCE(?, color) WHERE id = ?';
-  db.run(sql, [name, color, id], function (err) {
+  const sql = 'UPDATE tags SET name = COALESCE(?, name), color = COALESCE(?, color) WHERE id = ? AND organization_id = ?';
+  db.run(sql, [name, color, id, organizationId], function (err) {
     if (err) {
       if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({ error: 'Ya existe una etiqueta con ese nombre' });
+        return res.status(400).json({ error: 'Ya existe una etiqueta con ese nombre en tu organización' });
       }
       return res.status(500).json({ error: err.message });
     }
@@ -1820,9 +1838,10 @@ apiRouter.put('/tags/:id', (req: Request, res: Response) => {
 // Eliminar una etiqueta
 apiRouter.delete('/tags/:id', (req: Request, res: Response) => {
   const { id } = req.params;
+  const organizationId = req.user!.organizationId;
 
-  const sql = 'DELETE FROM tags WHERE id = ?';
-  db.run(sql, [id], function (err) {
+  const sql = 'DELETE FROM tags WHERE id = ? AND organization_id = ?';
+  db.run(sql, [id, organizationId], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
