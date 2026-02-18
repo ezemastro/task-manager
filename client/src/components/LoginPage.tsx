@@ -165,7 +165,7 @@ export default function LoginPage() {
       }
 
       // Redirigir a la aplicación
-      window.location.href = '/';
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al seleccionar organización');
       setLoading(false);

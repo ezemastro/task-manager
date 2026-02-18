@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import { Box } from '@mui/material';
 import NavigationBar from './components/NavigationBar';
+import LandingPage from './components/LandingPage';
 import ProjectsList from './components/ProjectsList';
 import UsersManagement from './components/UsersManagement';
 import UserDashboard from './components/UserDashboard';
@@ -24,6 +25,7 @@ function App() {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
       <Box sx={{ flex: 1 }}>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -34,7 +36,7 @@ function App() {
               <ProtectedRoute>
                 <NavigationBar />
                 <Routes>
-                  <Route path="/" element={<ProjectsList />} />
+                  <Route path="/dashboard" element={<ProjectsList />} />
                   <Route path="/stages" element={<AllStagesView />} />
                   <Route path="/completed-projects" element={<CompletedProjectsView />} />
                   <Route path="/paused-projects" element={<PausedProjectsView />} />

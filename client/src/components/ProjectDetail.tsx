@@ -154,7 +154,7 @@ export default function ProjectDetail() {
     setDeleting(true);
     try {
       await apiClient.deleteProject(Number(id));
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al eliminar proyecto';
       setError(message);

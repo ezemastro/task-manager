@@ -297,7 +297,7 @@ export default function NavigationBar() {
   };
 
   const menuItems = [
-    { path: '/', label: 'Proyectos', icon: <HomeIcon /> },
+    { path: '/dashboard', label: 'Proyectos', icon: <HomeIcon /> },
     { path: '/stages', label: 'Etapas en Proceso', icon: <ViewListIcon /> },
     { path: '/completed-projects', label: 'Proyectos Completados', icon: <CheckCircleIcon /> },
     { path: '/paused-projects', label: 'Proyectos Paralizados', icon: <PauseCircleIcon /> },
