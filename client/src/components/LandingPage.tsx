@@ -100,7 +100,7 @@ const LandingPage = () => {
     {
       label: 'Detalles de Proyecto',
       description: 'Visualiza y edita todos los detalles de un proyecto: descripción, fechas, etapas, comentarios y archivos adjuntos.',
-      image: '/screenshots/project-detail.png'
+      image: '/screenshots/project-details.png'
     },
     {
       label: 'Gestión de Clientes',
@@ -264,7 +264,7 @@ const LandingPage = () => {
           <Grid container spacing={4}>
             {[
               { title: 'Dashboard de Proyectos', image: '/screenshots/dashboard-full.png', description: 'Vista completa de todos tus proyectos activos' },
-              { title: 'Detalle de Proyecto', image: '/screenshots/project-detail-full.png', description: 'Gestiona etapas, comentarios y archivos' },
+              { title: 'Detalle de Proyecto', image: '/screenshots/project-details-full.png', description: 'Gestiona etapas, comentarios y archivos' },
               { title: 'Vista de Etapas', image: '/screenshots/stages-view.png', description: 'Visualiza todas las etapas en progreso' },
               { title: 'Gestión de Clientes', image: '/screenshots/clients-full.png', description: 'Administra tu cartera de clientes' },
               { title: 'Plantillas de Etapas', image: '/screenshots/templates-full.png', description: 'Crea flujos de trabajo reutilizables' },
