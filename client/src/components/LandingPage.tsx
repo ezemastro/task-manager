@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Box, Button, Container, Typography, Card, CardContent, Grid, Paper, Stepper, Step, StepLabel, StepContent } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -10,9 +11,27 @@ import {
   AccountTree as AccountTreeIcon,
   Layers as LayersIcon
 } from '@mui/icons-material';
+import { apiClient } from '../services/apiClient';
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        await apiClient.getMe();
+        setIsAuthenticated(true);
+      } catch {
+        setIsAuthenticated(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const handleGetStarted = () => {
+    navigate(isAuthenticated ? '/dashboard' : '/login');
+  };
 
   const features = [
     {
@@ -136,14 +155,14 @@ const LandingPage = () => {
                 <Button
                   variant="contained"
                   size="large"
-                  onClick={() => navigate('/login')}
+                  onClick={handleGetStarted}
                   sx={{
                     bgcolor: 'white',
                     color: 'primary.main',
                     '&:hover': { bgcolor: 'grey.100' }
                   }}
                 >
-                  Iniciar Sesión
+                  Comenzar
                 </Button>
                 <Button
                   variant="outlined"
@@ -365,12 +384,12 @@ const LandingPage = () => {
             ¿Listo para Empezar?
           </Typography>
           <Typography variant="h6" paragraph sx={{ mb: 4 }}>
-            Inicia sesión y comienza a gestionar tus proyectos de manera eficiente
+            Comienza a gestionar tus proyectos de manera eficiente
           </Typography>
           <Button
             variant="contained"
             size="large"
-            onClick={() => navigate('/login')}
+            onClick={handleGetStarted}
             sx={{
               bgcolor: 'white',
               color: 'primary.main',
@@ -380,7 +399,7 @@ const LandingPage = () => {
               '&:hover': { bgcolor: 'grey.100' }
             }}
           >
-            Acceder a la Plataforma
+            {isAuthenticated ? 'Ir al Dashboard' : 'Comenzar'}
           </Button>
         </Container>
       </Box>
