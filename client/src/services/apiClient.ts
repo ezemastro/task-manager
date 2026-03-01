@@ -299,10 +299,11 @@ class ApiClient {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          // Solo redirigir a login si NO es un error en la ruta de login
-          // (para evitar redirección al ingresar contraseña incorrecta)
-          const isLoginEndpoint = error.config?.url?.includes('/auth/login');
-          if (!isLoginEndpoint) {
+          // No redirigir en rutas de autenticación o checks opcionales
+          const url = error.config?.url || '';
+          const isLoginEndpoint = url.includes('/auth/login');
+          const isAuthCheck = url.includes('/auth/me');
+          if (!isLoginEndpoint && !isAuthCheck) {
             // Token expirado o inválido en rutas protegidas
             window.location.href = '/login';
           }
