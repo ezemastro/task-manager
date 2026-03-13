@@ -218,7 +218,7 @@ export default function LoginPage() {
         <Card sx={{ width: '100%', maxWidth: 500 }}>
           <CardContent sx={{ p: 4 }}>
             <Typography variant="h4" component="h1" gutterBottom textAlign="center">
-              Gestión de Proyectos
+              MASGestión
             </Typography>
 
             <Divider sx={{ my: 3 }} />

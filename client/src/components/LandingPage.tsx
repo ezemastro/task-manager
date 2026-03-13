@@ -145,7 +145,7 @@ const LandingPage = () => {
           <Grid container spacing={4} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h2" component="h1" gutterBottom fontWeight="bold">
-                Sistema de Gestión de Proyectos
+                MASGestión
               </Typography>
               <Typography variant="h5" paragraph sx={{ mb: 4 }}>
                 Organiza, gestiona y completa proyectos con etapas secuenciales, 
@@ -410,7 +410,7 @@ const LandingPage = () => {
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, md: 4 }}>
               <Typography variant="h6" gutterBottom fontWeight="bold">
-                Sistema de Gestión de Proyectos
+                MASGestión
               </Typography>
               <Typography variant="body2" color="grey.400">
                 Plataforma completa para la gestión de proyectos con etapas secuenciales,

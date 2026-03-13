@@ -1,6 +1,6 @@
 {
-  "name": "Sistema de Gestión de Proyectos",
-  "short_name": "Gestión Proyectos",
+  "name": "MASGestión",
+  "short_name": "MASGestión",
   "description": "Sistema integral de gestión de proyectos y etapas",
   "start_url": "/",
   "display": "standalone",

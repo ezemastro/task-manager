@@ -339,8 +339,8 @@ export default function NavigationBar() {
                 fontSize: { xs: '1rem', md: '1.25rem' },
                 fontWeight: 500
               }}
-            >
-              {user?.organizationName || 'Gestión de Proyectos'}
+               >
+                {user?.organizationName || 'MASGestión'}
             </Typography>
             {!isMobile && (
               <IconButton
@@ -496,7 +496,7 @@ export default function NavigationBar() {
       <Box sx={{ width: 280 }}>
         <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
           <Typography variant="h6" gutterBottom>
-            {user?.organizationName || 'Gestión de Proyectos'}
+              {user?.organizationName || 'MASGestión'}
           </Typography>
           <Typography variant="body2" sx={{ opacity: 0.9 }}>
             {user?.email}
