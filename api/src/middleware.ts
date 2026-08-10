@@ -58,3 +58,13 @@ export function flexibleAuthMiddleware(req: Request, res: Response, next: NextFu
   req.user = payload;
   next();
 }
+
+// Middleware admin: requiere scope 'admin' en el JWT actual.
+// Lee los scopes de req.user (poblado por authMiddleware/flexibleAuthMiddleware);
+// NO consulta /api/auth/me.
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user?.scopes?.includes('admin')) {
+    return res.status(403).json({ error: 'Admin required' });
+  }
+  next();
+}

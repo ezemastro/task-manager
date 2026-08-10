@@ -5,6 +5,9 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { apiRouter } from './apiRouter';
 import { authRouter } from './authRouter';
+import { backupsRouter } from './backupsRouter';
+import { authMiddleware, requireAdmin } from './middleware';
+import { startBackupScheduler } from './backupScheduler';
 import { runMigrations } from './runMigrations';
 
 const app = express();
@@ -31,6 +34,9 @@ app.use('/api/auth', authRouter);
 
 // Rutas API (protegidas)
 app.use('/api', apiRouter);
+
+// Rutas de backups (protegidas + admin)
+app.use('/api/backups', authMiddleware, requireAdmin, backupsRouter);
 
 // Headers de seguridad y SEO
 app.use((req: Request, res: Response, next) => {
@@ -78,6 +84,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    startBackupScheduler();
   });
 }
 
