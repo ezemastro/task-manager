@@ -30,7 +30,9 @@ export interface Project {
   id: number;
   name: string;
   description?: string;
+  contact?: string;
   status: string;
+  completed_date?: string | null;
   client_id?: number;
   client_name?: string;
   responsible_id?: number;
@@ -75,6 +77,31 @@ export interface Stage {
     content: string;
     created_at: string;
   }>;
+}
+
+export interface StageCycleComparison {
+  status: 'early' | 'late' | 'sin_fecha';
+  days_early: number;
+  days_late: number;
+}
+
+export interface StageCycle {
+  id: number;
+  organization_id: number;
+  project_id: number;
+  stage_id: number;
+  cycle_number: number;
+  started_at: string;
+  started_by: number;
+  started_by_name?: string;
+  ended_at?: string;
+  ended_by?: number;
+  ended_by_name?: string;
+  deadline_used?: string;
+  deadline_for_display?: string;
+  duration_days?: number | null;
+  cycle_status?: 'open' | 'closed';
+  comparison?: StageCycleComparison | null;
 }
 
 export interface StageDetail {
@@ -123,6 +150,7 @@ export interface Comment {
 export interface CreateProjectRequest {
   name: string;
   description?: string;
+  contact?: string;
   client_id?: number;
   responsible_id?: number;
   deadline?: string;
@@ -131,10 +159,25 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   description?: string;
+  contact?: string | null;
   status?: string;
   client_id?: number;
   responsible_id?: number;
   deadline?: string | null;
+}
+
+export interface ProjectSummaryStage {
+  stage_name: string;
+  total_days: number;
+  delayed_cycles: number;
+}
+
+export interface ProjectSummary {
+  year: number;
+  available_years: number[];
+  projects_created: number;
+  projects_completed: number;
+  stages: ProjectSummaryStage[];
 }
 
 export interface CreateStageRequest {
@@ -391,6 +434,11 @@ class ApiClient {
     return data;
   }
 
+  async getProjectSummary(year: number): Promise<ProjectSummary> {
+    const { data } = await this.api.get<ProjectSummary>('/summary', { params: { year } });
+    return data;
+  }
+
   // ==================== STAGES ====================
 
   async getStages(filters?: StageFilters): Promise<Stage[]> {
@@ -431,6 +479,21 @@ class ApiClient {
 
   async unstartStage(id: number): Promise<{ message: string }> {
     const { data } = await this.api.put(`/stages/${id}/unstart`);
+    return data;
+  }
+
+  async getStageCycles(stageId: number): Promise<StageCycle[]> {
+    const { data } = await this.api.get<StageCycle[]>(`/stages/${stageId}/cycles`);
+    return data;
+  }
+
+  async startStageCycle(stageId: number): Promise<StageCycle> {
+    const { data } = await this.api.post<StageCycle>(`/stages/${stageId}/cycles`);
+    return data;
+  }
+
+  async finishStageCycle(stageId: number, cycleId: number): Promise<StageCycle> {
+    const { data } = await this.api.put<StageCycle>(`/stages/${stageId}/cycles/${cycleId}/finish`);
     return data;
   }
 

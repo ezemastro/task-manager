@@ -49,6 +49,7 @@ export default function ProjectDetail() {
   const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
   const [deletingStage, setDeletingStage] = useState(false);
+  const [stageLifecycleLoading, setStageLifecycleLoading] = useState(false);
   
   // Storage key para el scroll
   const SCROLL_KEY = `projectDetail_scroll_${id}`;
@@ -384,6 +385,16 @@ export default function ProjectDetail() {
             </Box>
 
             <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap alignItems="center">
+              {project.contact && (
+                <Box>
+                  <Typography variant="body2" color="text.secondary" component="span">
+                    Contacto:{' '}
+                  </Typography>
+                  <Typography variant="body2" fontWeight="medium" component="span">
+                    {project.contact}
+                  </Typography>
+                </Box>
+              )}
               {project.responsible_name && (
                 <Box>
                   <Typography variant="body2" color="text.secondary" component="span">
@@ -495,6 +506,8 @@ export default function ProjectDetail() {
                       stage={stage}
                       isCurrentStage={isCurrentStage}
                       onCompleted={handleStageUpdated}
+                      siblingLifecycleLoading={stageLifecycleLoading}
+                      onLifecycleLoadingChange={setStageLifecycleLoading}
                     />
                   </Box>
                 </Stack>
@@ -519,6 +532,7 @@ export default function ProjectDetail() {
         initialData={{
           name: project.name,
           description: project.description,
+          contact: project.contact,
           client_id: project.client_id,
           responsible_id: project.responsible_id,
           deadline: project.deadline,

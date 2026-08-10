@@ -42,6 +42,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import AddIcon from '@mui/icons-material/Add';
 import MenuIcon from '@mui/icons-material/Menu';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import { apiClient, type AuthUser } from '../services/apiClient';
 
 interface Organization {
@@ -304,7 +305,7 @@ export default function NavigationBar() {
     { path: '/users-management', label: 'Usuarios', icon: <ManageAccountsIcon /> },
     { path: '/clients-management', label: 'Clientes', icon: <BusinessIcon /> },
     { path: '/stage-templates', label: 'Etapas Predefinidas', icon: <LayersIcon /> },
-    { path: '/audit-logs', label: 'Historial', icon: <LayersIcon /> },
+    { path: '/summary', label: 'Resumen', icon: <AssessmentIcon /> },
   ];
 
   const handleMobileMenuToggle = () => {

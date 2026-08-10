@@ -37,6 +37,7 @@ export default function CreateProjectModal({
   const [formData, setFormData] = useState<CreateProjectRequest>({
     name: '',
     description: '',
+    contact: '',
     client_id: undefined,
     responsible_id: undefined,
     deadline: undefined,
@@ -129,6 +130,7 @@ export default function CreateProjectModal({
       setFormData({
         name: '',
         description: '',
+        contact: '',
         client_id: undefined,
         responsible_id: undefined,
         deadline: undefined,
@@ -153,6 +155,7 @@ export default function CreateProjectModal({
       // Verificar si hay cambios sin guardar
       const hasChanges = formData.name.trim() !== '' || 
                          formData.description?.trim() !== '' || 
+                         formData.contact?.trim() !== '' ||
                          formData.client_id !== undefined || 
                          formData.responsible_id !== undefined ||
                          formData.deadline !== undefined;
@@ -164,7 +167,7 @@ export default function CreateProjectModal({
         if (!confirm) return;
       }
       
-      setFormData({ name: '', description: '', client_id: undefined, responsible_id: undefined, deadline: undefined });
+      setFormData({ name: '', description: '', contact: '', client_id: undefined, responsible_id: undefined, deadline: undefined });
       setErrors({});
       setErrorMessage('');
       onClose();
@@ -264,6 +267,20 @@ export default function CreateProjectModal({
             multiline
             rows={4}
             disabled={loading}
+            inputProps={{
+              maxLength: 500,
+            }}
+          />
+
+          <TextField
+            fullWidth
+            label="Contacto"
+            name="contact"
+            value={formData.contact}
+            onChange={handleChange('contact')}
+            margin="normal"
+            disabled={loading}
+            helperText="Información de contacto relacionada con el proyecto"
             inputProps={{
               maxLength: 500,
             }}

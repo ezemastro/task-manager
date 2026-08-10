@@ -66,8 +66,8 @@ const LandingPage = () => {
     },
     {
       icon: <SpeedIcon sx={{ fontSize: 50 }} />,
-      title: 'Logs de Auditoría',
-      description: 'Registra todas las acciones importantes para trazabilidad completa.'
+      title: 'Resumen Anual',
+      description: 'Consulta el rendimiento de tus proyectos por año, etapa y ciclo de trabajo.'
     },
     {
       icon: <AssignmentIcon sx={{ fontSize: 50 }} />,
@@ -118,9 +118,9 @@ const LandingPage = () => {
       image: '/screenshots/completed-projects.png'
     },
     {
-      label: 'Logs de Auditoría',
-      description: 'Revisa el historial completo de acciones en la plataforma para trazabilidad y seguridad.',
-      image: '/screenshots/audit-logs.png'
+      label: 'Resumen Anual',
+      description: 'Consulta proyectos creados y completados, días acumulados por etapa y ciclos demorados por año.',
+      image: '/screenshots/dashboard.png'
     },
     {
       label: 'Administración de Usuarios',
@@ -268,7 +268,7 @@ const LandingPage = () => {
               { title: 'Vista de Etapas', image: '/screenshots/stages-view.png', description: 'Visualiza todas las etapas en progreso' },
               { title: 'Gestión de Clientes', image: '/screenshots/clients-full.png', description: 'Administra tu cartera de clientes' },
               { title: 'Plantillas de Etapas', image: '/screenshots/templates-full.png', description: 'Crea flujos de trabajo reutilizables' },
-              { title: 'Logs de Auditoría', image: '/screenshots/audit-full.png', description: 'Trazabilidad completa de acciones' }
+               { title: 'Resumen de Proyectos', image: '/screenshots/dashboard-full.png', description: 'Analiza el rendimiento anual de tus proyectos' }
             ].map((screenshot, index) => (
               <Grid size={{ xs: 12, md: 6 }} key={index}>
                 <Paper elevation={3} sx={{ overflow: 'hidden', height: '100%' }}>
@@ -430,7 +430,7 @@ const LandingPage = () => {
                 Características
               </Typography>
               <Typography variant="body2" color="grey.400">
-                Multi-tenancy • JWT Auth • Logs de Auditoría • Roles y Permisos
+                Multi-tenancy • JWT Auth • Resumen anual • Roles y Permisos
               </Typography>
             </Grid>
           </Grid>

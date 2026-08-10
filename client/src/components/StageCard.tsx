@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Card,
@@ -17,63 +17,121 @@ import {
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LabelIcon from '@mui/icons-material/Label';
 import CommentIcon from '@mui/icons-material/Comment';
-import type { Stage } from '../services/apiClient';
+import type { Stage, StageCycle } from '../services/apiClient';
 import { apiClient } from '../services/apiClient';
+import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
 
 interface StageCardProps {
   stage: Stage;
   isCurrentStage?: boolean;
   onCompleted?: () => void;
+  siblingLifecycleLoading?: boolean;
+  onLifecycleLoadingChange?: (loading: boolean) => void;
 }
 
-export default function StageCard({ stage, isCurrentStage, onCompleted }: StageCardProps) {
+export default function StageCard({ stage, isCurrentStage, onCompleted, siblingLifecycleLoading = false, onLifecycleLoadingChange }: StageCardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cycles, setCycles] = useState<StageCycle[]>([]);
+  const [cycleLoading, setCycleLoading] = useState(false);
+  const [cyclesLoaded, setCyclesLoaded] = useState(false);
+  const [stageStartConfirmed, setStageStartConfirmed] = useState(Boolean(stage.start_date));
+
+  const fetchCycles = useCallback(async () => {
+    let loaded = false;
+    try {
+      const fetchedCycles = await apiClient.getStageCycles(stage.id);
+      setCycles(fetchedCycles);
+      loaded = true;
+      if (!stage.start_date && !fetchedCycles.some((cycle) => !cycle.ended_at)) {
+        setStageStartConfirmed(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar historial de ciclos');
+    } finally {
+      setCyclesLoaded(loaded);
+    }
+  }, [stage.id, stage.start_date]);
+
+  useEffect(() => {
+    setCyclesLoaded(false);
+    fetchCycles();
+  }, [fetchCycles]);
+
+  const openCycle = cycles.find((cycle) => !cycle.ended_at);
+  // An open cycle is authoritative immediately after the start endpoint returns,
+  // before the parent project refresh replaces the stage prop with start_date.
+  const isInProgress = (Boolean(stage.start_date) || Boolean(openCycle)) && !stage.is_completed;
+
+  const handleStartCycle = async () => {
+    setCycleLoading(true); onLifecycleLoadingChange?.(true); setError('');
+    try { await apiClient.startStageCycle(stage.id); await fetchCycles(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Error al iniciar ciclo'); }
+    finally { setCycleLoading(false); onLifecycleLoadingChange?.(false); }
+  };
+
+  const handleFinishCycle = async () => {
+    if (!openCycle) return;
+    setCycleLoading(true); onLifecycleLoadingChange?.(true); setError('');
+    try { await apiClient.finishStageCycle(stage.id, openCycle.id); await fetchCycles(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Error al cerrar ciclo'); }
+    finally { setCycleLoading(false); onLifecycleLoadingChange?.(false); }
+  };
 
   const handleComplete = async () => {
     if (!isCurrentStage) return;
 
     setLoading(true);
+    onLifecycleLoadingChange?.(true);
     setError('');
 
     try {
       await apiClient.completeStage(stage.id);
+      await fetchCycles();
       if (onCompleted) onCompleted();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al completar la etapa';
       setError(message);
     } finally {
       setLoading(false);
+      onLifecycleLoadingChange?.(false);
     }
   };
 
   const handleStart = async () => {
     setLoading(true);
+    onLifecycleLoadingChange?.(true);
     setError('');
 
     try {
       await apiClient.startStage(stage.id);
-      if (onCompleted) onCompleted();
+      setStageStartConfirmed(true);
+      await fetchCycles();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al iniciar la etapa';
       setError(message);
     } finally {
+      onCompleted?.();
       setLoading(false);
+      onLifecycleLoadingChange?.(false);
     }
   };
 
   const handleUncomplete = async () => {
     setLoading(true);
+    onLifecycleLoadingChange?.(true);
     setError('');
 
     try {
       await apiClient.uncompleteStage(stage.id);
+      await fetchCycles();
       if (onCompleted) onCompleted();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al reabrir la etapa';
       setError(message);
     } finally {
       setLoading(false);
+      onLifecycleLoadingChange?.(false);
     }
   };
 
@@ -167,6 +225,20 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
           ) : null}
         </Stack>
 
+        {isInProgress && cyclesLoaded ? (
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+            {!openCycle ? (
+              <Button variant="outlined" color="primary" onClick={handleStartCycle} disabled={siblingLifecycleLoading || loading || cycleLoading}>
+                {cycleLoading ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null} COMIENZO
+              </Button>
+            ) : (
+              <Button variant="contained" color="warning" onClick={handleFinishCycle} disabled={siblingLifecycleLoading || loading || cycleLoading}>
+                {cycleLoading ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null} FIN (cerrar ciclo)
+              </Button>
+            )}
+          </Stack>
+        ) : null}
+
         {/* Tags si existen */}
         {stage.tags && stage.tags.length > 0 ? (
           <Box sx={{ mt: 2 }}>
@@ -246,13 +318,41 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
           </Alert>
         ) : null}
 
+        <Box sx={{ mt: 2 }}>
+          {cycles.length > 0 ? (
+            <Paper variant="outlined" sx={{ mt: 1.5, p: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" fontWeight="bold">Historial de ciclos</Typography>
+              <Stack spacing={0.75} sx={{ mt: 1 }}>
+                {cycles.map((cycle) => {
+                  const comparison = cycle.comparison;
+                  const color = !cycle.ended_at ? 'info.main' : comparison?.status === 'sin_fecha' ? 'text.secondary' : comparison?.status === 'late' ? 'error.main' : 'success.main';
+                  const resultLabel = !cycle.ended_at ? `· En curso · ${cycle.duration_days ?? 0} días` : comparison?.status === 'sin_fecha' ? '· Sin fecha límite' : comparison?.status === 'late' ? `· ${comparison.days_late} días atrasado` : `· ${comparison?.days_early || 0} días antes`;
+                  const durationLabel = cycle.ended_at ? `${cycle.duration_days ?? 0} días de duración` : '';
+                  const deadlineForDisplay = cycle.deadline_for_display || cycle.deadline_used;
+                  return <Box key={cycle.id} sx={{ borderLeft: 3, borderColor: color, pl: 1 }}>
+                    <Typography variant="body2" color={color} fontWeight="bold">
+                      Ciclo {cycle.cycle_number} {resultLabel}
+                      {durationLabel ? ` · ${durationLabel}` : ''}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      COMIENZO: {formatLocalDateTime(cycle.started_at)} · {cycle.started_by_name || 'Usuario'}
+                      {cycle.ended_at ? ` · FIN: ${formatLocalDateTime(cycle.ended_at)}` : ''}
+                      {deadlineForDisplay ? ` · Límite: ${formatLocalDate(deadlineForDisplay)}` : ''}
+                    </Typography>
+                  </Box>;
+                })}
+              </Stack>
+            </Paper>
+          ) : null}
+        </Box>
+
         {/* Botón de iniciar (si está pendiente) */}
-        {!stage.is_completed && !stage.start_date ? (
+        {!stage.is_completed && !stage.start_date && !stageStartConfirmed && !openCycle ? (
           <Button
             variant="outlined"
             color="primary"
             onClick={handleStart}
-            disabled={loading}
+            disabled={loading || siblingLifecycleLoading || cycleLoading}
             fullWidth
             sx={{ mt: 3 }}
           >
@@ -273,7 +373,7 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
             variant="contained"
             color="success"
             onClick={handleComplete}
-            disabled={loading}
+            disabled={loading || siblingLifecycleLoading || cycleLoading}
             fullWidth
             sx={{ mt: 3 }}
           >
@@ -294,7 +394,7 @@ export default function StageCard({ stage, isCurrentStage, onCompleted }: StageC
             variant="outlined"
             color="warning"
             onClick={handleUncomplete}
-            disabled={loading}
+            disabled={loading || siblingLifecycleLoading || cycleLoading}
             fullWidth
             sx={{ mt: 3 }}
           >

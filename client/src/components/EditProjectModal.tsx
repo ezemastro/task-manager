@@ -25,6 +25,7 @@ interface EditProjectModalProps {
   initialData: {
     name: string;
     description?: string;
+    contact?: string | null;
     client_id?: number;
     responsible_id?: number;
     deadline?: string;
@@ -41,6 +42,7 @@ export default function EditProjectModal({
   const [formData, setFormData] = useState({
     name: initialData.name,
     description: initialData.description || '',
+    contact: initialData.contact || '',
     client_id: initialData.client_id,
     responsible_id: initialData.responsible_id,
     deadline: isoToDateString(initialData.deadline),
@@ -57,6 +59,7 @@ export default function EditProjectModal({
       setFormData({
         name: initialData.name,
         description: initialData.description || '',
+        contact: initialData.contact || '',
         client_id: initialData.client_id,
         responsible_id: initialData.responsible_id,
         deadline: isoToDateString(initialData.deadline),
@@ -115,6 +118,7 @@ export default function EditProjectModal({
       await apiClient.updateProject(projectId, {
         name: formData.name,
         description: formData.description || undefined,
+        contact: formData.contact.trim() || null,
         client_id: formData.client_id || undefined,
         responsible_id: formData.responsible_id || undefined,
         deadline: formData.deadline ? dateStringToLocalISO(formData.deadline) : null,
@@ -138,6 +142,7 @@ export default function EditProjectModal({
       const hasChanges = 
         formData.name !== initialData.name ||
         formData.description !== (initialData.description || '') ||
+        formData.contact !== (initialData.contact || '') ||
         formData.client_id !== initialData.client_id ||
         formData.responsible_id !== initialData.responsible_id ||
         formData.deadline !== (initialData.deadline ? initialData.deadline.split('T')[0] : '');
@@ -238,6 +243,19 @@ export default function EditProjectModal({
             error={!!errors.description}
             helperText={errors.description}
             disabled={loading}
+          />
+
+          <TextField
+            margin="normal"
+            label="Contacto"
+            fullWidth
+            value={formData.contact}
+            onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+            helperText="Información de contacto relacionada con el proyecto"
+            disabled={loading}
+            inputProps={{
+              maxLength: 500,
+            }}
           />
 
           <TextField

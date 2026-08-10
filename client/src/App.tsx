@@ -12,7 +12,7 @@ import StageTemplatesManagement from './components/StageTemplatesManagement';
 import AllStagesView from './components/AllStagesView';
 import CompletedProjectsView from './components/CompletedProjectsView';
 import PausedProjectsView from './components/PausedProjectsView';
-import AuditLogsView from './components/AuditLogsView';
+import SummaryView from './components/SummaryView';
 import LoginPage from './components/LoginPage';
 import VerifyEmailPage from './components/VerifyEmailPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
@@ -44,7 +44,7 @@ function App() {
                   <Route path="/users-management" element={<UsersManagement />} />
                   <Route path="/clients-management" element={<ClientsManagement />} />
                   <Route path="/stage-templates" element={<StageTemplatesManagement />} />
-                  <Route path="/audit-logs" element={<AuditLogsView />} />
+                  <Route path="/summary" element={<SummaryView />} />
                   <Route path="/projects/:id" element={<ProjectDetail />} />
                   <Route path="/stages/:id" element={<StageDetail />} />
                 </Routes>

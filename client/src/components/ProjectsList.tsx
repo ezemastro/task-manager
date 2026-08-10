@@ -28,6 +28,54 @@ interface ProjectWithStages extends Project {
 
 type SortOption = 'name' | 'deadline' | 'progress' | 'recent';
 
+const FILTERS_STORAGE_KEY = 'projectsList_filters';
+
+interface ProjectsListFilters {
+  searchTerm: string;
+  selectedClient: string;
+  selectedResponsible: string;
+  dateFilter: string;
+  sortBy: SortOption;
+  showFilters: boolean;
+}
+
+const DEFAULT_FILTERS: ProjectsListFilters = {
+  searchTerm: '',
+  selectedClient: '',
+  selectedResponsible: '',
+  dateFilter: 'all',
+  sortBy: 'recent',
+  showFilters: true,
+};
+
+function readStoredFilters(): ProjectsListFilters {
+  try {
+    const stored = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!stored) return DEFAULT_FILTERS;
+
+    const parsed: unknown = JSON.parse(stored);
+    if (!parsed || typeof parsed !== 'object') return DEFAULT_FILTERS;
+
+    const candidate = parsed as Partial<ProjectsListFilters>;
+    return {
+      searchTerm: typeof candidate.searchTerm === 'string' ? candidate.searchTerm : DEFAULT_FILTERS.searchTerm,
+      selectedClient: typeof candidate.selectedClient === 'string' ? candidate.selectedClient : DEFAULT_FILTERS.selectedClient,
+      selectedResponsible: typeof candidate.selectedResponsible === 'string'
+        ? candidate.selectedResponsible
+        : DEFAULT_FILTERS.selectedResponsible,
+      dateFilter: ['all', 'today', 'week', 'month', 'overdue'].includes(candidate.dateFilter ?? '')
+        ? candidate.dateFilter as string
+        : DEFAULT_FILTERS.dateFilter,
+      sortBy: ['name', 'deadline', 'progress', 'recent'].includes(candidate.sortBy ?? '')
+        ? candidate.sortBy as SortOption
+        : DEFAULT_FILTERS.sortBy,
+      showFilters: typeof candidate.showFilters === 'boolean' ? candidate.showFilters : DEFAULT_FILTERS.showFilters,
+    };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+}
+
 export default function ProjectsList() {
   const [projects, setProjects] = useState<ProjectWithStages[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -36,13 +84,14 @@ export default function ProjectsList() {
   const [error, setError] = useState('');
   const [showCreateProject, setShowCreateProject] = useState(false);
   
-  // Filtros
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedClient, setSelectedClient] = useState<string>('');
-  const [selectedResponsible, setSelectedResponsible] = useState<string>('');
-  const [dateFilter, setDateFilter] = useState<string>('all'); // all, today, week, month, overdue
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
-  const [showFilters, setShowFilters] = useState(false);
+  // Restore filters lazily so the first persistence effect does not overwrite them.
+  const [initialFilters] = useState<ProjectsListFilters>(() => readStoredFilters());
+  const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm);
+  const [selectedClient, setSelectedClient] = useState(initialFilters.selectedClient);
+  const [selectedResponsible, setSelectedResponsible] = useState(initialFilters.selectedResponsible);
+  const [dateFilter, setDateFilter] = useState(initialFilters.dateFilter);
+  const [sortBy, setSortBy] = useState<SortOption>(initialFilters.sortBy);
+  const [showFilters, setShowFilters] = useState(initialFilters.showFilters);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -78,6 +127,21 @@ export default function ProjectsList() {
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
+        searchTerm,
+        selectedClient,
+        selectedResponsible,
+        dateFilter,
+        sortBy,
+        showFilters,
+      }));
+    } catch {
+      // Storage can be unavailable or read-only in restricted browser contexts.
+    }
+  }, [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters]);
 
   // Guardar posición de scroll
   const SCROLL_KEY = 'projectsList_scroll';
