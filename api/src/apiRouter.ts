@@ -103,6 +103,20 @@ function initializeDatabase() {
       )
     `);
 
+    // Compatibilidad también para bases de desarrollo antiguas sin email/phone.
+    db.all('PRAGMA table_info(clients)', (err, columns: Array<{ name: string }>) => {
+      if (err) {
+        console.error('Error al verificar las columnas de clients:', err.message);
+        return;
+      }
+      const existingColumns = new Set(columns.map((column) => column.name));
+      ['email', 'phone'].filter((column) => !existingColumns.has(column)).forEach((column) => {
+        db.run(`ALTER TABLE clients ADD COLUMN ${column} TEXT`, (alterErr) => {
+          if (alterErr) console.error(`Error al agregar ${column} a clients:`, alterErr.message);
+        });
+      });
+    });
+
     // Tabla de proyectos
     db.run(`
       CREATE TABLE IF NOT EXISTS projects (
@@ -110,17 +124,37 @@ function initializeDatabase() {
         organization_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         description TEXT,
+        contact TEXT,
         client_id INTEGER,
         responsible_id INTEGER,
         deadline DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'active',
+        completed_date DATETIME,
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
         FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
         FOREIGN KEY (responsible_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+
+    // Mantener compatibles las bases SQLite creadas antes de agregar contacto.
+    db.all('PRAGMA table_info(projects)', (err, columns: Array<{ name: string }>) => {
+      if (err) {
+        console.error('Error al verificar la columna contact en projects:', err.message);
+        return;
+      }
+
+      const missingColumns = [
+        ['contact', 'TEXT'],
+        ['completed_date', 'DATETIME'],
+      ] as const;
+      missingColumns.filter(([name]) => !columns.some((column) => column.name === name)).forEach(([name, type]) => {
+        db.run(`ALTER TABLE projects ADD COLUMN ${name} ${type}`, (alterErr) => {
+          if (alterErr) console.error(`Error al agregar la columna ${name} a projects:`, alterErr.message);
+        });
+      });
+    });
 
     // Tabla de plantillas de etapas
     db.run(`
@@ -157,6 +191,38 @@ function initializeDatabase() {
         FOREIGN KEY (responsible_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+
+    // Ciclos repetibles de trabajo dentro de cada etapa
+    db.run(`
+      CREATE TABLE IF NOT EXISTS stage_cycles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
+        project_id INTEGER NOT NULL,
+        stage_id INTEGER NOT NULL,
+        cycle_number INTEGER NOT NULL,
+        started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        started_by INTEGER,
+        ended_at DATETIME,
+        ended_by INTEGER,
+        deadline_used DATETIME,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (stage_id) REFERENCES stages(id) ON DELETE CASCADE,
+        FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (ended_by) REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE(stage_id, cycle_number)
+      )
+    `);
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_cycles_one_open ON stage_cycles(stage_id) WHERE ended_at IS NULL');
+    db.run('CREATE INDEX IF NOT EXISTS idx_stage_cycles_stage_history ON stage_cycles(stage_id, cycle_number DESC)');
+    db.run('CREATE INDEX IF NOT EXISTS idx_stage_cycles_organization ON stage_cycles(organization_id, project_id, stage_id)');
+    db.all('PRAGMA table_info(stage_cycles)', (cycleTableErr, cycleColumns: Array<{ name: string }>) => {
+      if (!cycleTableErr && cycleColumns.length > 0 && !cycleColumns.some((column) => column.name === 'deadline_used')) {
+        db.run('ALTER TABLE stage_cycles ADD COLUMN deadline_used DATETIME', (alterErr) => {
+          if (alterErr) console.error('Error al agregar deadline_used a stage_cycles:', alterErr.message);
+        });
+      }
+    });
 
     // Tabla de etiquetas
     db.run(`
@@ -290,6 +356,147 @@ function logAudit(params: AuditLogParams) {
   });
 }
 
+function dateOnly(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = String(value).match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : null;
+}
+
+function businessCalendarDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const raw = String(value).trim();
+  // Deadlines are date-only business values and must not be shifted.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return dateOnly(raw);
+
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const timestamp = /(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized) ? normalized : `${normalized}Z`;
+  const parsed = new Date(timestamp);
+  if (!Number.isFinite(parsed.getTime())) return null;
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(parsed);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    if (values.year && values.month && values.day) {
+      return `${values.year}-${values.month}-${values.day}`;
+    }
+  } catch {
+    // Fall back to Argentina's deterministic UTC-03:00 offset if ICU/timezone data is unavailable.
+  }
+
+  const fallback = new Date(parsed.getTime() - 3 * 60 * 60 * 1000);
+  return `${fallback.getUTCFullYear()}-${String(fallback.getUTCMonth() + 1).padStart(2, '0')}-${String(fallback.getUTCDate()).padStart(2, '0')}`;
+}
+
+function cycleComparison(endedAt: string, deadline: string | null) {
+  const finishedDate = businessCalendarDate(endedAt);
+  const deadlineDate = dateOnly(deadline);
+  if (!finishedDate || !deadlineDate) {
+    return { status: 'sin_fecha', days_early: 0, days_late: 0 };
+  }
+  const deadlineMillis = Date.parse(`${deadlineDate}T00:00:00Z`);
+  const finishedMillis = Date.parse(`${finishedDate}T00:00:00Z`);
+  if (!Number.isFinite(deadlineMillis) || !Number.isFinite(finishedMillis)) {
+    return { status: 'sin_fecha', days_early: 0, days_late: 0 };
+  }
+  const difference = Math.round((deadlineMillis - finishedMillis) / 86400000);
+  return difference >= 0
+    ? { status: 'early', days_early: difference, days_late: 0 }
+    : { status: 'late', days_early: 0, days_late: Math.abs(difference) };
+}
+
+function calendarDurationDays(startedAt: string | null | undefined, endedAt: string | null | undefined): number | null {
+  const startedDate = businessCalendarDate(startedAt);
+  const finishedDate = businessCalendarDate(endedAt || new Date().toISOString());
+  if (!startedDate || !finishedDate) return null;
+  const startedMillis = Date.parse(`${startedDate}T00:00:00Z`);
+  const finishedMillis = Date.parse(`${finishedDate}T00:00:00Z`);
+  if (!Number.isFinite(startedMillis) || !Number.isFinite(finishedMillis)) return null;
+  return Math.max(0, Math.round((finishedMillis - startedMillis) / 86400000));
+}
+
+// Resumen anual de proyectos completados y actividad de la organización.
+apiRouter.get('/summary', (req: Request, res: Response) => {
+  const requestedYear = Number(req.query.year);
+  const currentYear = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+  }).format(new Date()));
+  const year = Number.isInteger(requestedYear) && requestedYear >= 1900 && requestedYear <= 3000
+    ? requestedYear
+    : currentYear;
+  const organizationId = req.user!.organizationId;
+  const yearExpression = (column: string) => `CASE WHEN length(${column}) = 10 THEN substr(${column}, 1, 4) ELSE strftime('%Y', datetime(${column}, '-3 hours')) END`;
+
+  const countsSql = `
+    SELECT
+      SUM(CASE WHEN ${yearExpression('p.created_at')} = ? THEN 1 ELSE 0 END) as created_count,
+      SUM(CASE WHEN ${yearExpression('p.completed_date')} = ? THEN 1 ELSE 0 END) as completed_count
+    FROM projects p
+    WHERE p.organization_id = ?
+  `;
+  const stagesSql = `
+    SELECT
+      s.name as stage_name,
+      COALESCE(SUM(CASE
+        WHEN sc.started_at IS NULL THEN 0
+        ELSE MAX(0, CAST(ROUND(
+          julianday(date(COALESCE(sc.ended_at, CURRENT_TIMESTAMP), '-3 hours'))
+          - julianday(date(sc.started_at, '-3 hours'))
+        ) AS INTEGER))
+      END), 0) as total_days,
+      COALESCE(SUM(CASE
+        WHEN sc.ended_at IS NOT NULL
+          AND sc.started_at IS NOT NULL
+          AND sc.deadline_used IS NOT NULL
+          AND date(sc.ended_at, '-3 hours') > date(sc.deadline_used, '-3 hours')
+        THEN 1 ELSE 0
+      END), 0) as delayed_cycles
+    FROM projects p
+    INNER JOIN stages s ON s.project_id = p.id
+    LEFT JOIN stage_cycles sc ON sc.stage_id = s.id AND sc.project_id = p.id
+    WHERE p.organization_id = ? AND ${yearExpression('p.completed_date')} = ?
+    GROUP BY s.name
+    ORDER BY MIN(s.order_number), s.name
+  `;
+  const yearsSql = `
+    SELECT DISTINCT year FROM (
+      SELECT ${yearExpression('p.created_at')} as year FROM projects p WHERE p.organization_id = ?
+      UNION
+      SELECT ${yearExpression('p.completed_date')} as year FROM projects p WHERE p.organization_id = ?
+    ) WHERE year IS NOT NULL ORDER BY year DESC
+  `;
+
+  db.get(countsSql, [String(year), String(year), organizationId], (countsError, counts: any) => {
+    if (countsError) return res.status(500).json({ error: countsError.message });
+    db.all(stagesSql, [organizationId, String(year)], (stagesError, stages: any[]) => {
+      if (stagesError) return res.status(500).json({ error: stagesError.message });
+      db.all(yearsSql, [organizationId, organizationId], (yearsError, years: any[]) => {
+        if (yearsError) return res.status(500).json({ error: yearsError.message });
+        const availableYears = Array.from(new Set([
+          currentYear,
+          ...(years || []).map((row) => Number(row.year)).filter((value) => Number.isInteger(value)),
+        ])).sort((a, b) => b - a);
+        res.json({
+          year,
+          available_years: availableYears,
+          projects_created: Number(counts?.created_count || 0),
+          projects_completed: Number(counts?.completed_count || 0),
+          stages: (stages || []).map((stage) => ({
+            stage_name: stage.stage_name,
+            total_days: Number(stage.total_days || 0),
+            delayed_cycles: Number(stage.delayed_cycles || 0),
+          })),
+        });
+      });
+    });
+  });
+});
+
 // ==================== AUDIT LOGS ENDPOINTS ====================
 
 // Obtener logs de auditoría con filtros
@@ -415,8 +622,8 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
   }
 
   db.run(
-    'INSERT INTO clients (organization_id, name, contact_info) VALUES (?, ?, ?)',
-    [organizationId, name, JSON.stringify({ email, phone })],
+    'INSERT INTO clients (organization_id, name, email, phone) VALUES (?, ?, ?, ?)',
+    [organizationId, name, email || null, phone || null],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -684,15 +891,16 @@ apiRouter.delete('/stage-templates/:id', (req: Request, res: Response) => {
 
 // Crear un nuevo proyecto
 apiRouter.post('/projects', (req: Request, res: Response) => {
-  const { name, description, client_id, responsible_id, deadline } = req.body;
+  const { name, description, contact, client_id, responsible_id, deadline } = req.body;
   const organizationId = req.user!.organizationId;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre del proyecto es requerido' });
   }
 
-  const sql = 'INSERT INTO projects (organization_id, name, description, client_id, responsible_id, deadline) VALUES (?, ?, ?, ?, ?, ?)';
-  db.run(sql, [organizationId, name, description || null, client_id || null, responsible_id || null, deadline || null], function (err) {
+  const normalizedContact = typeof contact === 'string' ? contact.trim() || null : null;
+  const sql = 'INSERT INTO projects (organization_id, name, description, contact, client_id, responsible_id, deadline) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [organizationId, name, description || null, normalizedContact, client_id || null, responsible_id || null, deadline || null], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -748,7 +956,7 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
       entityType: 'project',
       entityId: projectId,
       projectName: name,
-      details: JSON.stringify({ name, description, client_id, responsible_id, deadline }),
+      details: JSON.stringify({ name, description, contact: normalizedContact, client_id, responsible_id, deadline }),
       ipAddress: req.ip
     });
 
@@ -756,6 +964,7 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
       id: projectId,
       name,
       description,
+      contact: normalizedContact,
       client_id,
       deadline,
       message: 'Proyecto creado exitosamente'
@@ -918,56 +1127,68 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, status, client_id, responsible_id, deadline } = req.body;
-
-  const updates: string[] = [];
-  const values: any[] = [];
-
-  if (name !== undefined) {
-    updates.push('name = ?');
-    values.push(name);
-  }
-  if (description !== undefined) {
-    updates.push('description = ?');
-    values.push(description);
-  }
-  if (status !== undefined) {
-    updates.push('status = ?');
-    values.push(status);
-  }
-  if (client_id !== undefined) {
-    updates.push('client_id = ?');
-    values.push(client_id);
-  }
-  if (responsible_id !== undefined) {
-    updates.push('responsible_id = ?');
-    values.push(responsible_id);
-  }
-  if (deadline !== undefined) {
-    updates.push('deadline = ?');
-    values.push(deadline);
-  }
-
-  if (updates.length === 0) {
-    return res.status(400).json({ error: 'No hay campos para actualizar' });
-  }
-
-  updates.push('updated_at = CURRENT_TIMESTAMP');
-  values.push(id);
-
+  const { name, description, contact, status, client_id, responsible_id, deadline } = req.body;
   const organizationId = req.user!.organizationId;
-  const sql = `UPDATE projects SET ${updates.join(', ')} WHERE id = ?`;
-  db.run(sql, values, function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+
+  db.get('SELECT status, completed_date FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (lookupError, existingProject: any) => {
+    if (lookupError) return res.status(500).json({ error: lookupError.message });
+    if (!existingProject) return res.status(404).json({ error: 'Proyecto no encontrado' });
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    const normalizedContact = contact === undefined
+      ? undefined
+      : (typeof contact === 'string' ? contact.trim() || null : null);
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name);
     }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Proyecto no encontrado' });
+    if (description !== undefined) {
+      updates.push('description = ?');
+      values.push(description);
     }
+    if (contact !== undefined) {
+      updates.push('contact = ?');
+      values.push(normalizedContact);
+    }
+    if (status !== undefined) {
+      updates.push('status = ?');
+      values.push(status);
+      if (status === 'completed' && existingProject.status !== 'completed') {
+        updates.push('completed_date = CURRENT_TIMESTAMP');
+      } else if (status !== 'completed' && existingProject.status === 'completed') {
+        updates.push('completed_date = NULL');
+      }
+    }
+    if (client_id !== undefined) {
+      updates.push('client_id = ?');
+      values.push(client_id);
+    }
+    if (responsible_id !== undefined) {
+      updates.push('responsible_id = ?');
+      values.push(responsible_id);
+    }
+    if (deadline !== undefined) {
+      updates.push('deadline = ?');
+      values.push(deadline);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, organizationId);
+
+    const sql = `UPDATE projects SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`;
+    db.run(sql, values, function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: 'Proyecto no encontrado' });
     
     // Obtener nombre del proyecto si se actualizó
-    db.get('SELECT name FROM projects WHERE id = ?', [id], (err, project: any) => {
-      const projectName = (name || project?.name) as string;
+      db.get('SELECT name FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (err, project: any) => {
+        const projectName = (name || project?.name) as string;
       
       logAudit({
         organizationId,
@@ -976,12 +1197,12 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
         entityType: 'project',
         entityId: Number(id),
         projectName: projectName,
-        details: JSON.stringify({ name, description, status, client_id, responsible_id, deadline }),
+          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline }),
         ipAddress: req.ip
       });
+      });
+      res.json({ message: 'Proyecto actualizado exitosamente' });
     });
-    
-    res.json({ message: 'Proyecto actualizado exitosamente' });
   });
 });
 
@@ -1135,6 +1356,191 @@ apiRouter.delete('/users/:id', (req: Request, res: Response) => {
 });
 
 // ==================== STAGES ENDPOINTS ====================
+
+function utcSqlTimestamp(): string {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '').slice(0, 19);
+}
+
+function rollbackAndReport(error: Error, callback: (error: Error) => void) {
+  db.run('ROLLBACK', (rollbackErr) => {
+    callback(rollbackErr
+      ? new Error(`${error.message}; además falló el rollback: ${rollbackErr.message}`)
+      : error);
+  });
+}
+
+function rollbackResponse(res: Response, status: number, message: string) {
+  db.run('ROLLBACK', (rollbackErr) => {
+    const error = rollbackErr ? `${message}; además falló el rollback: ${rollbackErr.message}` : message;
+    res.status(status).json({ error });
+  });
+}
+
+function openCycleForStage(stageId: number, organizationId: number, userId: number, ipAddress: string | undefined, callback: (error: Error | null, cycle?: any) => void) {
+  db.serialize(() => {
+    db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+      if (beginErr) return callback(beginErr);
+      db.get(`SELECT s.id, s.project_id, s.estimated_end_date, p.name as project_name
+        FROM stages s INNER JOIN projects p ON p.id = s.project_id
+        WHERE s.id = ? AND p.organization_id = ?`, [stageId, organizationId], (stageErr, stage: any) => {
+        if (stageErr || !stage) {
+          return rollbackAndReport(stageErr || new Error('Etapa no encontrada'), callback);
+        }
+        db.get('SELECT * FROM stage_cycles WHERE stage_id = ? AND organization_id = ? AND ended_at IS NULL', [stageId, organizationId], (openErr, existingCycle) => {
+          if (openErr) return rollbackAndReport(openErr, callback);
+          if (existingCycle) {
+            return db.run('COMMIT', (commitErr) => callback(commitErr || null, existingCycle));
+          }
+          db.get('SELECT COALESCE(MAX(cycle_number), 0) + 1 as cycle_number FROM stage_cycles WHERE stage_id = ?', [stageId], (numberErr, result: any) => {
+            if (numberErr) return rollbackAndReport(numberErr, callback);
+            const startedAt = utcSqlTimestamp();
+            db.run(`INSERT INTO stage_cycles (organization_id, project_id, stage_id, cycle_number, started_at, started_by, deadline_used)
+              VALUES (?, ?, ?, ?, ?, ?, NULL)`, [organizationId, stage.project_id, stageId, result.cycle_number, startedAt, userId], function (insertErr) {
+              if (insertErr) return rollbackAndReport(insertErr, callback);
+              const cycle = { id: this.lastID, organization_id: organizationId, project_id: stage.project_id, stage_id: stageId, cycle_number: result.cycle_number, started_at: startedAt, started_by: userId, deadline_used: null, deadline_for_display: stage.estimated_end_date || null, cycle_status: 'open' };
+              db.run('COMMIT', (commitErr) => {
+                if (commitErr) return callback(commitErr);
+                logAudit({ organizationId, userId, action: 'START', entityType: 'stage_cycle', entityId: cycle.id, projectName: stage.project_name, details: JSON.stringify({ stage_id: stageId, cycle_number: cycle.cycle_number, deadline_used: null }), ipAddress });
+                callback(null, cycle);
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+}
+
+function completeStageAndCloseCycle(stageId: number, organizationId: number, userId: number, ipAddress: string | undefined, callback: (error: Error | null) => void) {
+  db.serialize(() => {
+    db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+      if (beginErr) return callback(beginErr);
+      db.get(`SELECT s.name, s.estimated_end_date, p.name as project_name FROM stages s INNER JOIN projects p ON p.id = s.project_id
+        WHERE s.id = ? AND p.organization_id = ?`, [stageId, organizationId], (stageErr, stage: any) => {
+        if (stageErr || !stage) return rollbackAndReport(stageErr || new Error('Etapa no encontrada'), callback);
+        db.get('SELECT id, cycle_number FROM stage_cycles WHERE stage_id = ? AND organization_id = ? AND ended_at IS NULL', [stageId, organizationId], (cycleErr, cycle: any) => {
+          if (cycleErr) return rollbackAndReport(cycleErr, callback);
+          const finishCycle = (next: () => void) => {
+            if (!cycle) return next();
+            db.run('UPDATE stage_cycles SET ended_at = CURRENT_TIMESTAMP, ended_by = ?, deadline_used = ? WHERE id = ? AND ended_at IS NULL', [userId, stage.estimated_end_date || null, cycle.id], function (finishErr) {
+              if (finishErr) return rollbackAndReport(finishErr, callback);
+              if (this.changes === 0) return rollbackAndReport(new Error('El ciclo ya fue cerrado'), callback);
+              next();
+            });
+          };
+          finishCycle(() => {
+            db.run('UPDATE stages SET is_completed = 1, completed_date = CURRENT_TIMESTAMP WHERE id = ?', [stageId], (completeErr) => {
+              if (completeErr) return rollbackAndReport(completeErr, callback);
+              db.run('COMMIT', (commitErr) => {
+                if (commitErr) return callback(commitErr);
+                if (cycle) logAudit({ organizationId, userId, action: 'END', entityType: 'stage_cycle', entityId: cycle.id, projectName: stage.project_name, details: JSON.stringify({ stage_id: stageId, cycle_number: cycle.cycle_number, deadline_used: stage.estimated_end_date || null }), ipAddress });
+                logAudit({ organizationId, userId, action: 'COMPLETE', entityType: 'stage', entityId: stageId, projectName: stage.project_name, details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name }), ipAddress });
+                callback(null);
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+}
+
+// Historial de ciclos de una etapa (siempre limitado a la organización autenticada)
+apiRouter.get('/stages/:id/cycles', (req: Request, res: Response) => {
+  const stageId = Number(req.params.id);
+  const organizationId = req.user!.organizationId;
+  const sql = `
+    SELECT sc.*, su.name as started_by_name, eu.name as ended_by_name,
+      CASE WHEN sc.ended_at IS NULL THEN s.estimated_end_date ELSE sc.deadline_used END as deadline_for_display,
+      CASE WHEN sc.ended_at IS NULL THEN 'open' ELSE 'closed' END as cycle_status
+    FROM stage_cycles sc
+    INNER JOIN stages s ON s.id = sc.stage_id
+    INNER JOIN projects p ON p.id = sc.project_id AND p.organization_id = ?
+    LEFT JOIN users su ON su.id = sc.started_by
+    LEFT JOIN users eu ON eu.id = sc.ended_by
+    WHERE sc.stage_id = ? AND sc.organization_id = ?
+    ORDER BY sc.cycle_number DESC
+  `;
+  db.all(sql, [organizationId, stageId, organizationId], (err, rows: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json((rows || []).map((cycle) => ({
+      ...cycle,
+      duration_days: calendarDurationDays(cycle.started_at, cycle.ended_at),
+      comparison: cycle.ended_at ? cycleComparison(cycle.ended_at, cycle.deadline_used) : null,
+    })));
+  });
+});
+
+// Abrir un nuevo ciclo. El índice parcial impide dos ciclos abiertos aun bajo concurrencia.
+apiRouter.post('/stages/:id/cycles', (req: Request, res: Response) => {
+  const stageId = Number(req.params.id);
+  const organizationId = req.user!.organizationId;
+  const userId = req.user!.userId;
+  db.serialize(() => {
+    db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+      if (beginErr) return res.status(500).json({ error: beginErr.message });
+      const stageSql = `SELECT s.id, s.name, s.project_id, s.start_date, s.is_completed, s.estimated_end_date, p.name as project_name
+        FROM stages s INNER JOIN projects p ON p.id = s.project_id
+        WHERE s.id = ? AND p.organization_id = ?`;
+      db.get(stageSql, [stageId, organizationId], (stageErr, stage: any) => {
+        if (stageErr || !stage) {
+          return rollbackResponse(res, stageErr ? 500 : 404, stageErr?.message || 'Etapa no encontrada');
+        }
+        if (!stage.start_date || Boolean(stage.is_completed)) {
+          return rollbackResponse(res, 400, 'La etapa debe estar en proceso para iniciar un ciclo');
+        }
+        db.get('SELECT id FROM stage_cycles WHERE stage_id = ? AND ended_at IS NULL', [stageId], (openErr, openCycle) => {
+          if (openErr) return rollbackResponse(res, 500, openErr.message);
+          if (openCycle) return rollbackResponse(res, 409, 'La etapa ya tiene un ciclo abierto');
+          db.get('SELECT COALESCE(MAX(cycle_number), 0) + 1 as cycle_number FROM stage_cycles WHERE stage_id = ?', [stageId], (numberErr, result: any) => {
+          if (numberErr) return rollbackResponse(res, 500, numberErr.message);
+           const startedAt = utcSqlTimestamp();
+           db.run(`INSERT INTO stage_cycles (organization_id, project_id, stage_id, cycle_number, started_at, started_by, deadline_used)
+             VALUES (?, ?, ?, ?, ?, ?, NULL)`, [organizationId, stage.project_id, stageId, result.cycle_number, startedAt, userId], function (insertErr) {
+            if (insertErr) {
+              return rollbackResponse(res, 500, insertErr.message);
+            }
+            const cycleId = this.lastID;
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) return res.status(500).json({ error: commitErr.message });
+               logAudit({ organizationId, userId, action: 'START', entityType: 'stage_cycle', entityId: cycleId, projectName: stage.project_name, details: JSON.stringify({ stage_id: stageId, cycle_number: result.cycle_number, deadline_used: null }), ipAddress: req.ip });
+               res.status(201).json({ id: cycleId, organization_id: organizationId, project_id: stage.project_id, stage_id: stageId, cycle_number: result.cycle_number, started_at: startedAt, started_by: userId, deadline_used: null, deadline_for_display: stage.estimated_end_date || null, cycle_status: 'open' });
+            });
+          });
+        });
+        });
+      });
+    });
+  });
+});
+
+// Cerrar un ciclo específico, sin cambiar el estado de completitud de la etapa.
+apiRouter.put('/stages/:stageId/cycles/:cycleId/finish', (req: Request, res: Response) => {
+  const stageId = Number(req.params.stageId);
+  const cycleId = Number(req.params.cycleId);
+  const organizationId = req.user!.organizationId;
+  const userId = req.user!.userId;
+  const lookup = `SELECT sc.*, s.name as stage_name, s.estimated_end_date, p.name as project_name
+    FROM stage_cycles sc INNER JOIN stages s ON s.id = sc.stage_id
+    INNER JOIN projects p ON p.id = sc.project_id AND p.organization_id = ?
+    WHERE sc.id = ? AND sc.stage_id = ? AND sc.organization_id = ? AND sc.ended_at IS NULL`;
+  db.get(lookup, [organizationId, cycleId, stageId, organizationId], (err, cycle: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!cycle) return res.status(404).json({ error: 'Ciclo abierto no encontrado' });
+    db.run(`UPDATE stage_cycles SET ended_at = CURRENT_TIMESTAMP, ended_by = ?, deadline_used = ?
+      WHERE id = ? AND ended_at IS NULL`, [userId, cycle.estimated_end_date || null, cycleId], function (updateErr) {
+      if (updateErr) return res.status(500).json({ error: updateErr.message });
+      if (this.changes === 0) return res.status(409).json({ error: 'El ciclo ya fue cerrado' });
+      db.get(`SELECT sc.*, su.name as started_by_name, eu.name as ended_by_name
+        FROM stage_cycles sc LEFT JOIN users su ON su.id = sc.started_by LEFT JOIN users eu ON eu.id = sc.ended_by WHERE sc.id = ?`, [cycleId], (selectErr, finished: any) => {
+        if (selectErr) return res.status(500).json({ error: selectErr.message });
+        const comparison = cycleComparison(finished.ended_at, finished.deadline_used);
+        logAudit({ organizationId, userId, action: 'END', entityType: 'stage_cycle', entityId: cycleId, projectName: cycle.project_name, details: JSON.stringify({ stage_id: stageId, cycle_number: finished.cycle_number, deadline_used: finished.deadline_used, comparison }), ipAddress: req.ip });
+        res.json({ ...finished, comparison });
+      });
+    });
+  });
+});
 
 // Crear la siguiente etapa (debe ser después de completar la anterior)
 apiRouter.post('/stages', (req: Request, res: Response) => {
@@ -1402,53 +1808,22 @@ apiRouter.get('/stages/:id', (req: Request, res: Response) => {
 
 // Completar una etapa
 apiRouter.put('/stages/:id/complete', (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  // Obtener información de la etapa actual
-  db.get('SELECT * FROM stages WHERE id = ?', [id], (err, currentStage: any) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!currentStage) {
-      return res.status(404).json({ error: 'Etapa no encontrada' });
-    }
-
-    // Marcar la etapa como completada - NO inicia la siguiente automáticamente
-    const completeSql = 'UPDATE stages SET is_completed = 1, completed_date = CURRENT_TIMESTAMP WHERE id = ?';
-    db.run(completeSql, [id], function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-
-      // Obtener organizationId y project_name desde la etapa
-      db.get('SELECT p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
-        if (!err && row) {
-          logAudit({
-            organizationId: row.organization_id,
-            userId: req.user!.userId,
-            action: 'COMPLETE',
-            entityType: 'stage',
-            entityId: Number(id),
-            projectName: row.project_name,
-            details: JSON.stringify({ stage_name: currentStage.name, project_name: row.project_name }),
-            ipAddress: req.ip
-          });
-        }
-      });
-
-      res.json({ 
-        message: 'Etapa completada exitosamente'
-      });
-    });
+  const stageId = Number(req.params.id);
+  completeStageAndCloseCycle(stageId, req.user!.organizationId, req.user!.userId, req.ip, (err) => {
+    if (err) return res.status(err.message === 'Etapa no encontrada' ? 404 : 500).json({ error: err.message });
+    res.json({ message: 'Etapa completada exitosamente' });
   });
 });
 
 // Iniciar una etapa manualmente
 apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
-  const { id } = req.params;
+  const stageId = Number(req.params.id);
 
-  const sql = 'UPDATE stages SET start_date = CURRENT_TIMESTAMP WHERE id = ? AND start_date IS NULL';
-  db.run(sql, [id], function (err) {
+  const sql = `UPDATE stages SET start_date = CURRENT_TIMESTAMP
+    WHERE id = ? AND start_date IS NULL AND EXISTS (
+      SELECT 1 FROM projects p WHERE p.id = stages.project_id AND p.organization_id = ?
+    )`;
+  db.run(sql, [stageId, req.user!.organizationId], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1456,54 +1831,51 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La etapa ya fue iniciada o no existe' });
     }
     
-    db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
-      if (!err && row) {
-        logAudit({
-          organizationId: row.organization_id,
-          userId: req.user!.userId,
-          action: 'START',
-          entityType: 'stage',
-          entityId: Number(id),
-          projectName: row.project_name,
-          details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }),
-          ipAddress: req.ip
+    openCycleForStage(stageId, req.user!.organizationId, req.user!.userId, req.ip, (cycleErr) => {
+      if (cycleErr) {
+        // Do not leave a started stage without its automatic first cycle.
+        db.run('UPDATE stages SET start_date = NULL WHERE id = ? AND start_date IS NOT NULL AND is_completed = 0', [stageId], (resetErr) => {
+          const message = resetErr
+            ? `${cycleErr.message}; además no se pudo revertir el inicio: ${resetErr.message}`
+            : cycleErr.message;
+          res.status(500).json({ error: message });
         });
+        return;
       }
+      db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.organization_id = ?', [stageId, req.user!.organizationId], (lookupErr, row: any) => {
+        if (!lookupErr && row) logAudit({ organizationId: row.organization_id, userId: req.user!.userId, action: 'START', entityType: 'stage', entityId: stageId, projectName: row.project_name, details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }), ipAddress: req.ip });
+      });
+      res.json({ message: 'Etapa iniciada exitosamente' });
     });
-    
-    res.json({ message: 'Etapa iniciada exitosamente' });
   });
 });
 
 // Volver una etapa a estado "no iniciada"
 apiRouter.put('/stages/:id/unstart', (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  const sql = 'UPDATE stages SET start_date = NULL WHERE id = ? AND start_date IS NOT NULL AND is_completed = 0';
-  db.run(sql, [id], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(400).json({ error: 'La etapa no está iniciada, ya está completada o no existe' });
-    }
-    
-    db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, row: any) => {
-      if (!err && row) {
-        logAudit({
-          organizationId: row.organization_id,
-          userId: req.user!.userId,
-          action: 'UNSTART',
-          entityType: 'stage',
-          entityId: Number(id),
-          projectName: row.project_name,
-          details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }),
-          ipAddress: req.ip
+  const stageId = Number(req.params.id);
+  const organizationId = req.user!.organizationId;
+  db.serialize(() => {
+    db.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+      if (beginErr) return res.status(500).json({ error: beginErr.message });
+      db.get(`SELECT s.name, s.start_date, s.is_completed, p.organization_id, p.name as project_name
+        FROM stages s INNER JOIN projects p ON s.project_id = p.id
+        WHERE s.id = ? AND p.organization_id = ?`, [stageId, organizationId], (lookupErr, stage: any) => {
+        if (lookupErr || !stage) return rollbackResponse(res, lookupErr ? 500 : 400, lookupErr?.message || 'La etapa no está iniciada, ya está completada o no existe');
+        if (!stage.start_date || Boolean(stage.is_completed)) return rollbackResponse(res, 400, 'La etapa no está iniciada, ya está completada o no existe');
+        db.get('SELECT id FROM stage_cycles WHERE stage_id = ? AND organization_id = ? AND ended_at IS NULL', [stageId, organizationId], (cycleErr, openCycle) => {
+          if (cycleErr) return rollbackResponse(res, 500, cycleErr.message);
+          if (openCycle) return rollbackResponse(res, 409, 'Finalizá el ciclo actual antes de deshacer el inicio');
+          db.run('UPDATE stages SET start_date = NULL WHERE id = ?', [stageId], (updateErr) => {
+            if (updateErr) return rollbackResponse(res, 500, updateErr.message);
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) return res.status(500).json({ error: commitErr.message });
+              logAudit({ organizationId, userId: req.user!.userId, action: 'UNSTART', entityType: 'stage', entityId: stageId, projectName: stage.project_name, details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name }), ipAddress: req.ip });
+              res.json({ message: 'Etapa devuelta a estado no iniciada exitosamente' });
+            });
+          });
         });
-      }
+      });
     });
-    
-    res.json({ message: 'Etapa devuelta a estado no iniciada exitosamente' });
   });
 });
 
