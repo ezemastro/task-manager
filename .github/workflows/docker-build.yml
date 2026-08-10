@@ -65,5 +65,5 @@ jobs:
       - name: Trigger Coolify Deployment
         if: success() && github.event_name != 'pull_request'
         run: |
-          curl -X POST "http://mastropietro.ddns.net:8000/api/v1/deploy?uuid=TU_APP_UUID&force=false" \
+          curl -X POST "http://mastropietro.ddns.net:8000/api/v1/deploy?uuid=tlxs9ylfucrogzic7wuoq915&force=false" \
                -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
