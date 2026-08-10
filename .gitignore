@@ -6,8 +6,10 @@ database.sqlite-wal
 database.sqlite-shm
 reverse-proxy-setup/
 
-# Backups
-api/backups/
+# Backups (el código escribe en /app/data → host ./data vía el bind mount de Coolify)
+data/backups/
+data/backup.log
+data/.tmp/
 *.bak
 *.ts.backup
 openspec/

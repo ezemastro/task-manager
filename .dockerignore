@@ -45,3 +45,8 @@ coverage/
 # Temporal
 tmp/
 temp/
+
+# Backups y datos de runtime (no deben terminar en la imagen)
+data/
+api/backups/
+*.bak
