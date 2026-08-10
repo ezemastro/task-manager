@@ -32,6 +32,8 @@ logs/
 # Database (será manejada por volúmenes)
 *.sqlite
 *.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 *.db
 
 # Test coverage
