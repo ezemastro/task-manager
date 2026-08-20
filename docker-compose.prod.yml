@@ -1,13 +1,12 @@
 services:
   task-manager:
-    image: 'ezemastro/task-manager:latest'
     build:
       context: .
       dockerfile: Dockerfile
     container_name: task-manager
     restart: unless-stopped
     volumes:
-      - ./data:/app/data
+      - '${DATA_PATH:-./data}:/app/data'
     environment:
       - NODE_ENV=production
       - PORT=3000
