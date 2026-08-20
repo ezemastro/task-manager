@@ -6,7 +6,7 @@ services:
     container_name: task-manager
     restart: unless-stopped
     volumes:
-      - '${DATA_PATH:-./data}:/app/data'
+      - './data:/app/data'
     environment:
       - NODE_ENV=production
       - PORT=3000
