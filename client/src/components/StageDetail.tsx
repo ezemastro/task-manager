@@ -40,6 +40,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import { apiClient, type StageDetail, type StageCycle, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
 import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
+import { useAssistantRefetch } from './assistant/AssistantDataBus';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
@@ -53,6 +54,9 @@ export default function StageDetail() {
   const [showCreateTagDialog, setShowCreateTagDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteTagDialog, setShowDeleteTagDialog] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<Tag | null>(null);
+  const [deletingTag, setDeletingTag] = useState(false);
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#1976d2');
@@ -163,6 +167,9 @@ export default function StageDetail() {
     }
   }, [id, fetchStageDetail]);
 
+  // A chat-driven mutation on this stage or its comments refreshes it in place.
+  useAssistantRefetch([`stage:${id}`, 'comments'], fetchStageDetail);
+
   const fetchUsers = async () => {
     try {
       const usersData = await apiClient.getUsers();
@@ -240,7 +247,7 @@ export default function StageDetail() {
   };
 
   const handleAddTag = async () => {
-    if (!id || !selectedTag) return;
+    if (!id || !selectedTag || deletingTag || !availableTags.some((tag) => tag.id === selectedTag.id)) return;
     
     try {
       await apiClient.addTagToStage(Number(id), { tag_id: selectedTag.id });
@@ -277,6 +284,29 @@ export default function StageDetail() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear etiqueta';
       setError(message);
+    }
+  };
+
+  const handleDeleteTagClick = (tag: Tag) => {
+    setTagToDelete(tag);
+    setShowDeleteTagDialog(true);
+  };
+
+  const handleDeleteTag = async () => {
+    if (!tagToDelete) return;
+
+    setDeletingTag(true);
+    setError('');
+    try {
+      await apiClient.deleteTag(tagToDelete.id);
+      setShowDeleteTagDialog(false);
+      setSelectedTag((currentTag) => currentTag?.id === tagToDelete.id ? null : currentTag);
+      setTagToDelete(null);
+      await Promise.all([fetchAllTags(), fetchStageDetail()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al eliminar etiqueta');
+    } finally {
+      setDeletingTag(false);
     }
   };
 
@@ -1011,16 +1041,27 @@ export default function StageDetail() {
           ) : (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {stage.tags.map((tag) => (
-                <Chip
-                  key={tag.id}
-                  label={tag.name}
-                  sx={{
-                    bgcolor: tag.color || undefined,
-                    color: tag.color ? '#fff' : undefined,
-                  }}
-                  onDelete={() => handleRemoveTag(tag.id)}
-                  deleteIcon={<DeleteIcon />}
-                />
+                <Stack key={tag.id} direction="row" spacing={0.25} alignItems="center">
+                  <Chip
+                    label={tag.name}
+                    sx={{
+                      bgcolor: tag.color || undefined,
+                      color: tag.color ? '#fff' : undefined,
+                    }}
+                    onDelete={() => handleRemoveTag(tag.id)}
+                    deleteIcon={<DeleteIcon />}
+                  />
+                  <IconButton
+                    size="small"
+                    color="error"
+                    aria-label={`Eliminar etiqueta ${tag.name}`}
+                    onClick={() => handleDeleteTagClick(
+                      allTags.find((candidate) => candidate.id === tag.id) || { ...tag, created_at: '' }
+                    )}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
               ))}
             </Stack>
           )}
@@ -1169,6 +1210,19 @@ export default function StageDetail() {
                       color: option.color ? '#fff' : undefined,
                     }}
                   />
+                  <IconButton
+                    size="small"
+                    color="error"
+                    aria-label={`Eliminar etiqueta ${option.name}`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDeleteTagClick(option);
+                    }}
+                    sx={{ ml: 'auto' }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
                 </li>
               );
             }}
@@ -1178,6 +1232,33 @@ export default function StageDetail() {
           <Button onClick={() => setShowAddTagDialog(false)}>Cancelar</Button>
           <Button onClick={handleAddTag} variant="contained" disabled={!selectedTag}>
             Agregar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo de confirmación de eliminación de etiqueta */}
+      <Dialog
+        open={showDeleteTagDialog}
+        onClose={() => !deletingTag && setShowDeleteTagDialog(false)}
+      >
+        <DialogTitle>¿Eliminar etiqueta?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            ¿Estás seguro de que quieres eliminar la etiqueta "{tagToDelete?.name}"?
+            Esta acción no se puede deshacer.
+          </Typography>
+          {(tagToDelete?.usage_count ?? 0) > 0 && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              Esta etiqueta está asignada a {tagToDelete?.usage_count} etapa(s). Al eliminarla también se eliminarán todas sus asignaciones.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteTagDialog(false)} disabled={deletingTag}>
+            Cancelar
+          </Button>
+          <Button onClick={handleDeleteTag} color="error" variant="contained" disabled={deletingTag}>
+            {deletingTag ? 'Eliminando...' : 'Eliminar'}
           </Button>
         </DialogActions>
       </Dialog>

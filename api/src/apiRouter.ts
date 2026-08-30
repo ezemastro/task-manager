@@ -32,6 +32,12 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 // Initialize database tables
 function initializeDatabase() {
   db.serialize(() => {
+    // Foreign-key cascades (including stage_tags when deleting a tag) are
+    // disabled by default for each SQLite connection.
+    db.run('PRAGMA foreign_keys = ON', (err) => {
+      if (err) console.error('No se pudieron habilitar las claves foráneas:', err.message);
+      else console.log('Claves foráneas SQLite habilitadas');
+    });
     // Habilitar WAL: mejora vida de la SD-card y concurrencia de lectura
     db.exec("PRAGMA journal_mode=WAL", (err: Error | null) => {
       if (err) console.error('No se pudo habilitar WAL:', err.message);

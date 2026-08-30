@@ -34,6 +34,8 @@ import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
 import DeadlineChip from './DeadlineChip';
+import { clearProjectReturnSnapshot } from '../utils/projectReturnSnapshot';
+import { useAssistantRefetch } from './assistant/AssistantDataBus';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -75,6 +77,9 @@ export default function ProjectDetail() {
     fetchProjectDetail();
   }, [fetchProjectDetail]);
   
+  // A chat-driven mutation on this project or its stages refreshes it in place.
+  useAssistantRefetch(['stages', `project:${id}`], fetchProjectDetail);
+
   // Guardar posición de scroll mientras navegas por la página
   useEffect(() => {
     const handleScroll = () => {
@@ -155,6 +160,7 @@ export default function ProjectDetail() {
     setDeleting(true);
     try {
       await apiClient.deleteProject(Number(id));
+      clearProjectReturnSnapshot(Number(id));
       navigate('/dashboard');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al eliminar proyecto';

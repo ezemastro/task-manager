@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -21,6 +22,13 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiClient, type Project, type Stage, type Client, type User } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
 import CreateProjectModal from './CreateProjectModal';
+import { useAssistantRefetch } from './assistant/AssistantDataBus';
+import {
+  clearProjectReturnSnapshot,
+  filtersMatch,
+  readProjectReturnSnapshot,
+  type ProjectReturnFilters,
+} from '../utils/projectReturnSnapshot';
 
 interface ProjectWithStages extends Project {
   stages: Stage[];
@@ -30,7 +38,7 @@ type SortOption = 'name' | 'deadline' | 'progress' | 'recent';
 
 const FILTERS_STORAGE_KEY = 'projectsList_filters';
 
-interface ProjectsListFilters {
+export interface ProjectsListFilters extends ProjectReturnFilters {
   searchTerm: string;
   selectedClient: string;
   selectedResponsible: string;
@@ -128,6 +136,9 @@ export default function ProjectsList() {
     fetchProjects();
   }, []);
 
+  // A chat-driven project mutation refreshes this list in place.
+  useAssistantRefetch(['projects'], fetchProjects);
+
   useEffect(() => {
     try {
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
@@ -143,29 +154,52 @@ export default function ProjectsList() {
     }
   }, [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters]);
 
-  // Guardar posición de scroll
-  const SCROLL_KEY = 'projectsList_scroll';
+  const location = useLocation();
+  const currentFilters = useMemo<ProjectsListFilters>(() => ({
+    searchTerm,
+    selectedClient,
+    selectedResponsible,
+    dateFilter,
+    sortBy,
+    showFilters,
+  }), [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters]);
 
+  // Restore only the snapshot captured for this dashboard history entry.
   useEffect(() => {
-    const handleScroll = () => {
-      sessionStorage.setItem(SCROLL_KEY, window.scrollY.toString());
+    if (loading) return;
+
+    const snapshot = readProjectReturnSnapshot();
+    if (!snapshot || snapshot.dashboardKey !== location.key || !filtersMatch(snapshot.filters, currentFilters)) {
+      if (snapshot) clearProjectReturnSnapshot();
+      return;
+    }
+
+    if (projects.length === 0) {
+      clearProjectReturnSnapshot();
+      return;
+    }
+
+    let frame = 0;
+    let attempts = 0;
+    let cancelled = false;
+    const restore = () => {
+      if (cancelled) return;
+      const maximum = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      window.scrollTo(0, Math.min(snapshot.scrollY, maximum));
+      attempts += 1;
+      if (attempts >= 8) {
+        clearProjectReturnSnapshot(snapshot.projectId);
+        return;
+      }
+      frame = window.requestAnimationFrame(restore);
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Restaurar posición de scroll después de cargar
-  useEffect(() => {
-    if (!loading && projects.length > 0) {
-      const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-      if (savedScroll) {
-        setTimeout(() => {
-          window.scrollTo(0, parseInt(savedScroll, 10));
-        }, 100);
-      }
-    }
-  }, [loading, projects.length]);
+    frame = window.requestAnimationFrame(restore);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [loading, projects.length, location.key, currentFilters]);
 
   // Filtrar y ordenar proyectos
   const filteredAndSortedProjects = useMemo(() => {
@@ -491,6 +525,8 @@ export default function ProjectsList() {
               responsibleName={project.responsible_name}
               deadline={project.deadline}
               stages={project.stages}
+              dashboardLocationKey={location.key}
+              filters={currentFilters}
               onStageCompleted={handleRefresh}
             />
           ))}

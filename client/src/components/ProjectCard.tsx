@@ -14,6 +14,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import type { Stage } from '../services/apiClient';
 import StageInProgressCard from './StageInProgressCard';
 import DeadlineChip from './DeadlineChip';
+import { saveProjectReturnSnapshot, type ProjectReturnFilters } from '../utils/projectReturnSnapshot';
 
 interface ProjectCardProps {
   projectId: number;
@@ -24,6 +25,8 @@ interface ProjectCardProps {
   deadline?: string;
   stages: Stage[];
   onStageCompleted?: () => void;
+  dashboardLocationKey?: string;
+  filters?: ProjectReturnFilters;
 }
 
 export default function ProjectCard({
@@ -34,6 +37,8 @@ export default function ProjectCard({
   responsibleName,
   deadline,
   stages,
+  dashboardLocationKey,
+  filters,
 }: ProjectCardProps) {
   const completedStages = stages.filter(stage => stage.is_completed).length;
   const totalStages = stages.length;
@@ -136,6 +141,18 @@ export default function ProjectCard({
           <IconButton
             component={RouterLink}
             to={`/projects/${projectId}`}
+            onClick={() => {
+              if (dashboardLocationKey && filters) {
+                saveProjectReturnSnapshot({
+                  dashboardKey: dashboardLocationKey,
+                  projectId,
+                  filters,
+                  scrollY: window.scrollY,
+                  viewportHeight: window.innerHeight,
+                  savedAt: Date.now(),
+                });
+              }
+            }}
             color="primary"
             size="small"
             aria-label="Ver detalles del proyecto"
