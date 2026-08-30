@@ -10,6 +10,15 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Asistente de IA (opcional): Coolify no inyecta variables globales, deben
+      # declararse manualmente por app. Sin ellas el asistente queda
+      # deshabilitado y el resto de la app funciona sin cambios.
+      - AI_API_KEY
+      - AI_BASE_URL
+      - AI_MODEL
+      - AI_MAX_TOOL_ITERATIONS
+      - AI_REQUEST_TIMEOUT_MS
+      - AI_MAX_OUTPUT_TOKENS
     healthcheck:
       test:
         - CMD

@@ -243,6 +243,34 @@ docker run -d -p 3000:3000 -v task-manager-data:/app/data tu-usuario/task-manage
 | PUT | `/api/comments/:id` | Actualizar comentario | - |
 | DELETE | `/api/comments/:id` | Eliminar comentario | - |
 
+## 🤖 Asistente de IA (opcional)
+
+El asistente de IA embebido permite ejecutar acciones de la aplicación por
+lenguaje natural. Es completamente opcional: si las variables requeridas no
+están configuradas, el asistente queda deshabilitado y el resto de la
+aplicación funciona exactamente igual que antes.
+
+**Importante**: Coolify no inyecta variables de entorno globales — cada
+variable debe configurarse manualmente en el entorno de la app (per-app env)
+en Coolify, o en el archivo `.env` local para desarrollo.
+
+| Variable | Requerida | Descripción | Valor por defecto |
+|---|---|---|---|
+| `AI_API_KEY` | Sí (para habilitar) | API key del proveedor compatible con OpenAI `/chat/completions` | — |
+| `AI_BASE_URL` | Sí (para habilitar) | URL base absoluta `http`/`https` del proveedor (sin query ni fragment); incluye cualquier segmento de versión, ej. `.../v1` | — |
+| `AI_MODEL` | Sí (para habilitar) | Nombre del modelo a usar | — |
+| `AI_MAX_TOOL_ITERATIONS` | No | Máximo de llamadas a herramientas por turno (1–10) | `6` |
+| `AI_REQUEST_TIMEOUT_MS` | No | Timeout por solicitud al proveedor en milisegundos (5000–120000) | `60000` |
+| `AI_MAX_OUTPUT_TOKENS` | No | Máximo de tokens de salida del modelo (128–4096) | `1024` |
+
+`AI_API_KEY`, `AI_BASE_URL` y `AI_MODEL` deben configurarse **juntas**: si solo
+una o dos están presentes, el arranque falla en producción
+(`NODE_ENV=production`) y advierte + deshabilita el asistente en desarrollo.
+Si las tres están ausentes, el asistente queda deshabilitado silenciosamente
+sin ningún otro cambio de comportamiento.
+
+Ver `.env.example` para el formato exacto de cada variable.
+
 ## 🧩 Componentes Frontend
 
 ### `UsersManagement`

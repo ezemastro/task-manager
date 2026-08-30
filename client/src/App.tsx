@@ -19,6 +19,8 @@ import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import Footer from './components/Footer';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import AssistantWidget from './components/assistant/AssistantWidget';
+import { AssistantDataBusProvider } from './components/assistant/AssistantDataBus';
 
 function App() {
   return (
@@ -34,20 +36,23 @@ function App() {
             path="/*"
             element={
               <ProtectedRoute>
-                <NavigationBar />
-                <Routes>
-                  <Route path="/dashboard" element={<ProjectsList />} />
-                  <Route path="/stages" element={<AllStagesView />} />
-                  <Route path="/completed-projects" element={<CompletedProjectsView />} />
-                  <Route path="/paused-projects" element={<PausedProjectsView />} />
-                  <Route path="/users" element={<UserDashboard />} />
-                  <Route path="/users-management" element={<UsersManagement />} />
-                  <Route path="/clients-management" element={<ClientsManagement />} />
-                  <Route path="/stage-templates" element={<StageTemplatesManagement />} />
-                  <Route path="/summary" element={<SummaryView />} />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/stages/:id" element={<StageDetail />} />
-                </Routes>
+                <AssistantDataBusProvider>
+                  <NavigationBar />
+                  <Routes>
+                    <Route path="/dashboard" element={<ProjectsList />} />
+                    <Route path="/stages" element={<AllStagesView />} />
+                    <Route path="/completed-projects" element={<CompletedProjectsView />} />
+                    <Route path="/paused-projects" element={<PausedProjectsView />} />
+                    <Route path="/users" element={<UserDashboard />} />
+                    <Route path="/users-management" element={<UsersManagement />} />
+                    <Route path="/clients-management" element={<ClientsManagement />} />
+                    <Route path="/stage-templates" element={<StageTemplatesManagement />} />
+                    <Route path="/summary" element={<SummaryView />} />
+                    <Route path="/projects/:id" element={<ProjectDetail />} />
+                    <Route path="/stages/:id" element={<StageDetail />} />
+                  </Routes>
+                  <AssistantWidget />
+                </AssistantDataBusProvider>
               </ProtectedRoute>
             }
           />

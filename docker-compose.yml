@@ -15,6 +15,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Asistente de IA (opcional): sin estas variables el asistente queda
+      # deshabilitado y el resto de la app funciona sin cambios.
+      - AI_API_KEY
+      - AI_BASE_URL
+      - AI_MODEL
+      - AI_MAX_TOOL_ITERATIONS
+      - AI_REQUEST_TIMEOUT_MS
+      - AI_MAX_OUTPUT_TOKENS
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s

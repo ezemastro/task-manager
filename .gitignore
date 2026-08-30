@@ -16,3 +16,10 @@ openspec/
 .atl/
 coverage/
 *.log
+# Local database snapshots (contain real data — never publish)
+api/backups/
+*.sqlite
+
+# Local demo environment (credentials + isolated demo database)
+DEMO_LOCAL.md
+api/demo-data/

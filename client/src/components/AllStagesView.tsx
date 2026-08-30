@@ -28,6 +28,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
 import DeadlineChip from './DeadlineChip';
+import { useAssistantRefetch } from './assistant/AssistantDataBus';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'intermediate_date';
 
@@ -91,6 +92,9 @@ export default function AllStagesView() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // A chat-driven stage mutation refreshes this view in place.
+  useAssistantRefetch(['stages'], fetchData);
 
   // Guardar filtros en sessionStorage cuando cambien
   useEffect(() => {

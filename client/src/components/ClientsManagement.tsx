@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { apiClient, type Client } from '../services/apiClient';
 import CreateClientModal from './CreateClientModal';
+import { useAssistantRefetch } from './assistant/AssistantDataBus';
 
 export default function ClientsManagement() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -55,6 +56,9 @@ export default function ClientsManagement() {
   useEffect(() => {
     fetchClients();
   }, []);
+
+  // A chat-driven create_client refreshes this list in place.
+  useAssistantRefetch(['clients'], fetchClients);
 
   const handleEdit = (client: Client) => {
     setSelectedClient(client);

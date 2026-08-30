@@ -6,9 +6,14 @@ import cookieParser from 'cookie-parser';
 import { apiRouter } from './apiRouter';
 import { authRouter } from './authRouter';
 import { backupsRouter } from './backupsRouter';
+import { assistantRouter } from './assistantRouter';
 import { authMiddleware, requireAdmin } from './middleware';
 import { startBackupScheduler } from './backupScheduler';
 import { runMigrations } from './runMigrations';
+// Imported for its module-load side effect: resolveAiConfig() runs fail-closed
+// at boot (mirrors JWT_SECRET), so a partial AI_* config throws in production
+// before the server starts accepting traffic, exactly like a bad JWT_SECRET.
+import './aiConfig';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -37,6 +42,11 @@ app.use('/api', apiRouter);
 
 // Rutas de backups (protegidas + admin)
 app.use('/api/backups', authMiddleware, requireAdmin, backupsRouter);
+
+// Rutas del asistente de IA (protegidas). Siempre montado bajo /api/* para
+// que el fallback de SPA nunca las intercepte; los handlers degradan
+// limpiamente cuando la IA no está configurada (aiConfig.ts).
+app.use('/api/assistant', authMiddleware, assistantRouter);
 
 // Headers de seguridad y SEO
 app.use((req: Request, res: Response, next) => {
