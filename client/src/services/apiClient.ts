@@ -308,6 +308,21 @@ export interface AuthUser {
   email: string;
   role: string;
   scopes?: string[];
+  isSuperAdmin: boolean;
+}
+
+export interface AdminAccount {
+  id: number;
+  email: string;
+  name: string;
+  created_at: string;
+  is_super_admin: boolean;
+  organizations: {
+    organizationId: number;
+    organizationName: string;
+    role: string;
+    scopes: string[];
+  }[];
 }
 
 export interface LoginRequest {
@@ -395,6 +410,13 @@ class ApiClient {
 
   async changePassword(request: ChangePasswordRequest): Promise<void> {
     await this.api.put('/auth/change-password', request);
+  }
+
+  // ==================== ADMIN ====================
+
+  async getAdminAccounts(): Promise<AdminAccount[]> {
+    const { data } = await this.api.get<AdminAccount[]>('/admin/accounts');
+    return data;
   }
 
   private buildQueryString(params: Record<string, string | number | boolean | undefined>): string {

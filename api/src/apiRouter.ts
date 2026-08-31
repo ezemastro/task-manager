@@ -2,12 +2,15 @@ import { Router, type Request, type Response } from "express";
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { authMiddleware } from './middleware';
+import { authMiddleware, requireSuperAdmin } from './middleware';
 
 export const apiRouter = Router();
 
 // Proteger todas las rutas del API con autenticación
 apiRouter.use(authMiddleware);
+
+// Email del super administrador global (dueño de la plataforma).
+const SUPER_ADMIN_EMAIL = 'marcelomastropietro@gmail.com';
 
 // Database setup - usar directorio de datos si existe (Docker), sino usar raíz
 const dataDir = process.env.DB_PATH || (fs.existsSync('/app/data') ? '/app/data' : '.');
@@ -52,9 +55,37 @@ function initializeDatabase() {
         password_hash TEXT NOT NULL,
         name TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_super_admin INTEGER NOT NULL DEFAULT 0
       )
     `);
+
+    // Compatibilidad para bases existentes creadas antes de is_super_admin.
+    // El sembrado corre solo después de confirmar la columna (callback del
+    // ALTER) para no depender del orden de ejecución de node-sqlite3.
+    db.all('PRAGMA table_info(accounts)', (err, columns: Array<{ name: string }>) => {
+      if (err) {
+        console.error('Error al verificar las columnas de accounts:', err.message);
+        return;
+      }
+      const seedSuperAdmin = () => {
+        db.run(
+          'UPDATE accounts SET is_super_admin = 1 WHERE LOWER(email) = ? AND is_super_admin = 0',
+          [SUPER_ADMIN_EMAIL],
+          (seedErr) => {
+            if (seedErr) console.error('Error al sembrar el super administrador:', seedErr.message);
+          }
+        );
+      };
+      if (!columns.some((column) => column.name === 'is_super_admin')) {
+        db.run('ALTER TABLE accounts ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0', (alterErr) => {
+          if (alterErr) console.error('Error al agregar is_super_admin a accounts:', alterErr.message);
+          else seedSuperAdmin();
+        });
+      } else {
+        seedSuperAdmin();
+      }
+    });
 
     // Tabla de organizaciones
     db.run(`
@@ -1358,6 +1389,63 @@ apiRouter.delete('/users/:id', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     res.json({ message: 'Usuario eliminado exitosamente' });
+  });
+});
+
+// ==================== ADMIN ENDPOINTS ====================
+
+// Parsear scopes de membresía (JSON) con fallback seguro.
+function parseScopes(raw: string | null | undefined): string[] {
+  try {
+    return JSON.parse(raw || '[]');
+  } catch {
+    return [];
+  }
+}
+
+// Listar todas las cuentas con sus membresías (solo super administrador).
+apiRouter.get('/admin/accounts', requireSuperAdmin, (req: Request, res: Response) => {
+  const sql = `
+    SELECT a.id, a.email, a.name, a.created_at, a.is_super_admin,
+           om.organization_id, om.role, om.scopes,
+           o.name AS organization_name
+    FROM accounts a
+    LEFT JOIN organization_members om ON om.account_id = a.id
+    LEFT JOIN organizations o ON o.id = om.organization_id
+    ORDER BY a.id, o.name
+  `;
+
+  db.all(sql, [], (err, rows: any[]) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    // Agrupar filas por cuenta; nunca se selecciona password_hash.
+    const accountsById = new Map<number, any>();
+    (rows || []).forEach((row) => {
+      let account = accountsById.get(row.id);
+      if (!account) {
+        account = {
+          id: row.id,
+          email: row.email,
+          name: row.name,
+          created_at: row.created_at,
+          is_super_admin: Boolean(row.is_super_admin),
+          organizations: [],
+        };
+        accountsById.set(row.id, account);
+      }
+      if (row.organization_id != null) {
+        account.organizations.push({
+          organizationId: row.organization_id,
+          organizationName: row.organization_name,
+          role: row.role,
+          scopes: parseScopes(row.scopes),
+        });
+      }
+    });
+
+    res.json(Array.from(accountsById.values()));
   });
 });
 

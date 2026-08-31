@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JWTPayload } from './auth';
+import { db } from './apiRouter';
 
 // Extender el tipo Request para incluir user
 declare global {
@@ -67,4 +68,28 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return res.status(403).json({ error: 'Admin required' });
   }
   next();
+}
+
+// Middleware super admin: verifica el flag is_super_admin leyendo la base de
+// datos por el email del JWT (req.user.email) en cada request. Nunca confía
+// en scopes del token. El acceso a db es diferido (solo en el request), lo
+// que hace seguro el import circular apiRouter ⇄ middleware (precedente: authRouter).
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user?.email) {
+    return res.status(401).json({ error: 'No autenticado' });
+  }
+
+  db.get(
+    'SELECT is_super_admin FROM accounts WHERE LOWER(email) = ?',
+    [req.user.email],
+    (err, row: { is_super_admin?: number } | undefined) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (!row || !row.is_super_admin) {
+        return res.status(403).json({ error: 'Se requieren permisos de super administrador' });
+      }
+      next();
+    }
+  );
 }

@@ -279,7 +279,7 @@ authRouter.get('/me', authMiddleware, (req: Request, res: Response) => {
   }
 
   db.get(
-    `SELECT u.*, o.name as organization_name, a.name as account_name, a.email, a.id as account_id
+    `SELECT u.*, o.name as organization_name, a.name as account_name, a.email, a.id as account_id, a.is_super_admin
      FROM users u
      INNER JOIN organizations o ON u.organization_id = o.id
      INNER JOIN accounts a ON u.account_email = a.email
@@ -301,7 +301,8 @@ authRouter.get('/me', authMiddleware, (req: Request, res: Response) => {
         organizationName: user.organization_name,
         name: user.account_name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        isSuperAdmin: Boolean(user.is_super_admin)
       });
     }
   );

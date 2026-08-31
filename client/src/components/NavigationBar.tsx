@@ -28,7 +28,7 @@ import {
 } from '@mui/material';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
-// import PeopleIcon from '@mui/icons-material/People';
+import PeopleIcon from '@mui/icons-material/People';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import BusinessIcon from '@mui/icons-material/Business';
 import LayersIcon from '@mui/icons-material/Layers';
@@ -426,6 +426,12 @@ export default function NavigationBar() {
             </Typography>
           </MenuItem>
           <Divider />
+          {user?.isSuperAdmin && (
+            <MenuItem component={RouterLink} to="/super-admin/accounts" onClick={handleMenuClose}>
+              <PeopleIcon fontSize="small" sx={{ mr: 1 }} />
+              Usuarios registrados
+            </MenuItem>
+          )}
           <MenuItem onClick={handlePasswordDialogOpen}>
             <LockIcon fontSize="small" sx={{ mr: 1 }} />
             Cambiar contraseña
@@ -520,7 +526,7 @@ export default function NavigationBar() {
             <Chip
               icon={<SwapHorizIcon />}
               label="Cambiar Organización"
-              onClick={(e: any) => {
+              onClick={(e: React.MouseEvent<HTMLElement>) => {
                 handleOrgMenuOpen(e);
                 handleMobileMenuClose();
               }}
