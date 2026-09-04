@@ -353,35 +353,47 @@ async function execListReferenceData(args: Record<string, unknown>, ctx: ToolCon
     );
   }
 
+  // Optional partial-name filter (accent/case-insensitive), same strategy as
+  // search_projects: rows are pre-fetched without the tight ROW_CAP and the
+  // substring match runs in JS via normalizeForSearch().
+  const name = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : undefined;
+  const nameFilter = (value: string) => normalizeForSearch(value).includes(normalizeForSearch(name!));
+
   const data: Record<string, unknown[]> = {};
 
   if (requested.includes('clients')) {
     const rows = await dbAll(
       'SELECT id, name, email FROM clients WHERE organization_id = ? ORDER BY name LIMIT ?',
-      [organizationId, ROW_CAP]
+      [organizationId, name ? SEARCH_SCAN_CAP : ROW_CAP]
     );
-    data.clients = capRows(rows, ['id', 'name', 'email']);
+    data.clients = capRows(name ? rows.filter((row) => nameFilter(row.name)) : rows, ['id', 'name', 'email']);
   }
   if (requested.includes('users')) {
+    // Users are listed in FULL (no ROW_CAP): organizations have a handful of
+    // users and the assistant must be able to resolve any of them by name.
     const rows = await dbAll(
-      'SELECT id, name, role FROM users WHERE organization_id = ? ORDER BY name LIMIT ?',
-      [organizationId, ROW_CAP]
+      'SELECT id, name, role FROM users WHERE organization_id = ? ORDER BY name',
+      [organizationId]
     );
-    data.users = capRows(rows, ['id', 'name', 'role']);
+    data.users = name
+      ? capRows(rows.filter((row) => nameFilter(row.name)), ['id', 'name', 'role'])
+      : rows.map((row) => projectRow(row, ['id', 'name', 'role']));
   }
   if (requested.includes('tags')) {
     const rows = await dbAll(
       'SELECT id, name, color FROM tags WHERE organization_id = ? ORDER BY name LIMIT ?',
-      [organizationId, ROW_CAP]
+      [organizationId, name ? SEARCH_SCAN_CAP : ROW_CAP]
     );
-    data.tags = capRows(rows, ['id', 'name', 'color']);
+    data.tags = capRows(name ? rows.filter((row) => nameFilter(row.name)) : rows, ['id', 'name', 'color']);
   }
   if (requested.includes('stage_templates')) {
     const rows = await dbAll(
       'SELECT id, name, order_number FROM stage_templates WHERE organization_id = ? ORDER BY order_number LIMIT ?',
-      [organizationId, ROW_CAP]
+      [organizationId, name ? SEARCH_SCAN_CAP : ROW_CAP]
     );
-    data.stage_templates = capRows(rows, ['id', 'name', 'order_number']);
+    data.stage_templates = name
+      ? capRows(rows.filter((row) => nameFilter(row.name)), ['id', 'name', 'order_number'])
+      : rows;
   }
 
   return { ok: true, data, resources: [] };

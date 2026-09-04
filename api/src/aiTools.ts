@@ -112,6 +112,7 @@ const searchStagesSchema: ToolSchema = {
 
 const listReferenceDataSchema: ToolSchema = {
   // entity_types intentionally absent — see REFERENCE_DATA_ENTITY_TYPES note above.
+  name: { kind: 'string', required: false, maxLength: 100 },
 };
 
 const getSummarySchema: ToolSchema = {
@@ -156,7 +157,7 @@ export const readTools: AiToolDefinition[] = [
     class: 'read',
     schema: listReferenceDataSchema,
     summary:
-      'list_reference_data(entity_types?:array<clients|users|tags|stage_templates>) — lists lookup data such as clients, users, tags and stage templates; omit entity_types to list all',
+      'list_reference_data(entity_types?:array<clients|users|tags|stage_templates>, name?:string) — lists lookup data such as clients, users, tags and stage templates; omit entity_types to list all; name (optional) filters the listed entities by partial, accent-insensitive name match',
     resourceHints: [],
   },
   {
