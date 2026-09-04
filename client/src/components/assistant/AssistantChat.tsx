@@ -20,10 +20,48 @@ import AssistantProgressSteps from './AssistantProgressSteps';
 import PendingActionCard from './PendingActionCard';
 import { getProgress, postCancel, postChat, postConfirm } from './assistantApi';
 import { useAssistantDataBus } from './AssistantDataBus';
-import type { ChatMessage, ChatState, PendingAction, ProgressStep } from './types';
+import type { ChatMessage, ChatRole, ChatState, PendingAction, ProgressStep } from './types';
 
 /** Progress polling cadence while a turn is in flight (design: client-generated turn id + progress polling, not SSE). */
 const PROGRESS_POLL_INTERVAL_MS = 750;
+
+/** sessionStorage key for the transcript — survives drawer close and page reloads within the same tab. */
+const CHAT_STORAGE_KEY = 'assistant_chat_history';
+const CHAT_STORAGE_MAX_MESSAGES = 100;
+
+interface StoredChatMessage {
+  role: ChatRole;
+  content: string;
+  degraded?: string;
+  steps?: ProgressStep[];
+}
+
+function readStoredMessages(): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((entry, index) => {
+      if (!entry || typeof entry !== 'object') return [];
+      const { role, content } = entry as { role?: unknown; content?: unknown };
+      if (role !== 'user' && role !== 'assistant') return [];
+      if (typeof content !== 'string') return [];
+
+      const extra: Partial<ChatMessage> = {};
+      if (role === 'assistant') {
+        const { degraded, steps } = entry as { degraded?: unknown; steps?: unknown };
+        if (typeof degraded === 'string') extra.degraded = degraded;
+        if (Array.isArray(steps)) extra.steps = steps as ProgressStep[];
+      }
+      return [{ id: `restored-msg-${index}`, role, content, ...extra }];
+    });
+  } catch {
+    return [];
+  }
+}
 
 function generateTurnId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -43,12 +81,14 @@ type ChatAction =
   | { type: 'ACTION_SUCCESS'; message: ChatMessage }
   | { type: 'ACTION_ERROR'; error: string };
 
-const initialState: ChatState = {
-  messages: [],
-  status: 'idle',
-  pending: null,
-  error: null,
-};
+function createInitialState(): ChatState {
+  return {
+    messages: readStoredMessages(),
+    status: 'idle',
+    pending: null,
+    error: null,
+  };
+}
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -91,7 +131,7 @@ function nextMessageId(): string {
 }
 
 export default function AssistantChat() {
-  const [state, dispatch] = useReducer(chatReducer, initialState);
+  const [state, dispatch] = useReducer(chatReducer, undefined, createInitialState);
   // Prior-turn messages, captured before the new user message is appended —
   // this is exactly the `history` the server expects alongside `message`.
   const historyRef = useRef(state.messages);
@@ -125,6 +165,19 @@ export default function AssistantChat() {
   // Never leave a poll timer running past unmount (e.g. the drawer closes
   // mid-turn).
   useEffect(() => stopPolling, []);
+
+  // Persist the transcript so a closed drawer or a page reload does not lose
+  // the conversation (same-tab session lifetime).
+  useEffect(() => {
+    try {
+      const stored: StoredChatMessage[] = state.messages
+        .slice(-CHAT_STORAGE_MAX_MESSAGES)
+        .map(({ role, content, degraded, steps }) => ({ role, content, degraded, steps }));
+      sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(stored));
+    } catch {
+      // Storage can be unavailable or read-only in restricted browser contexts.
+    }
+  }, [state.messages]);
 
   const handleSend = async (content: string) => {
     const priorHistory = historyRef.current.map(({ role, content: text }) => ({ role, content: text }));

@@ -17,14 +17,16 @@ export default function AssistantWidget() {
 
   return (
     <>
-      <Fab
-        color="primary"
-        aria-label="Abrir asistente de IA"
-        onClick={() => setOpen(true)}
-        sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: (theme) => theme.zIndex.drawer + 1 }}
-      >
-        <ChatIcon />
-      </Fab>
+      {!open && (
+        <Fab
+          color="primary"
+          aria-label="Abrir asistente de IA"
+          onClick={() => setOpen(true)}
+          sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        >
+          <ChatIcon />
+        </Fab>
+      )}
       <Drawer anchor="right" open={open} onClose={() => setOpen(false)}>
         <Box
           sx={{
