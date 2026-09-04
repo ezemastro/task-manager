@@ -31,6 +31,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import LabelIcon from '@mui/icons-material/Label';
 import CommentIcon from '@mui/icons-material/Comment';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -41,6 +42,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { apiClient, type StageDetail, type StageCycle, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
 import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
+import { useScrollRestoration } from '../utils/useScrollRestoration';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +69,9 @@ export default function StageDetail() {
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const openCycle = cycles.find((cycle) => !cycle.ended_at);
   const isInProgress = (Boolean(stage?.start_date) || Boolean(openCycle)) && !stage?.is_completed;
+
+  // Restore the scroll position when returning to this stage (history POP).
+  useScrollRestoration(`stage:${id}`, !loading);
 
   // Estados para edición de comentarios
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
@@ -210,6 +215,21 @@ export default function StageDetail() {
       await fetchStageDetail();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al reabrir etapa';
+      setError(message);
+    } finally {
+      setLifecycleLoading(false);
+    }
+  };
+
+  const handleStartStage = async () => {
+    if (!id) return;
+    setLifecycleLoading(true);
+    setError('');
+    try {
+      await apiClient.startStage(Number(id));
+      await Promise.all([fetchStageDetail(), refreshCycles()]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al iniciar etapa';
       setError(message);
     } finally {
       setLifecycleLoading(false);
@@ -629,6 +649,17 @@ export default function StageDetail() {
           >
             Eliminar
           </Button>
+          {!stage.start_date && !stage.is_completed && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<PlayCircleIcon />}
+              onClick={handleStartStage}
+              disabled={lifecycleLoading || cycleLoading}
+            >
+              Iniciar Etapa
+            </Button>
+          )}
           {stage.start_date && !stage.is_completed && (
             <Button
               variant="outlined"
@@ -1041,27 +1072,16 @@ export default function StageDetail() {
           ) : (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {stage.tags.map((tag) => (
-                <Stack key={tag.id} direction="row" spacing={0.25} alignItems="center">
-                  <Chip
-                    label={tag.name}
-                    sx={{
-                      bgcolor: tag.color || undefined,
-                      color: tag.color ? '#fff' : undefined,
-                    }}
-                    onDelete={() => handleRemoveTag(tag.id)}
-                    deleteIcon={<DeleteIcon />}
-                  />
-                  <IconButton
-                    size="small"
-                    color="error"
-                    aria-label={`Eliminar etiqueta ${tag.name}`}
-                    onClick={() => handleDeleteTagClick(
-                      allTags.find((candidate) => candidate.id === tag.id) || { ...tag, created_at: '' }
-                    )}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Stack>
+                <Chip
+                  key={tag.id}
+                  label={tag.name}
+                  sx={{
+                    bgcolor: tag.color || undefined,
+                    color: tag.color ? '#fff' : undefined,
+                  }}
+                  onDelete={() => handleRemoveTag(tag.id)}
+                  deleteIcon={<DeleteIcon />}
+                />
               ))}
             </Stack>
           )}
@@ -1210,23 +1230,28 @@ export default function StageDetail() {
                       color: option.color ? '#fff' : undefined,
                     }}
                   />
-                  <IconButton
-                    size="small"
-                    color="error"
-                    aria-label={`Eliminar etiqueta ${option.name}`}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleDeleteTagClick(option);
-                    }}
-                    sx={{ ml: 'auto' }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
                 </li>
               );
             }}
           />
+          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+            Etiquetas existentes
+          </Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {availableTags.map((tag) => (
+              <Chip
+                key={tag.id}
+                label={tag.name}
+                size="small"
+                sx={{
+                  bgcolor: tag.color || undefined,
+                  color: tag.color ? '#fff' : undefined,
+                }}
+                onDelete={() => handleDeleteTagClick(tag)}
+                deleteIcon={<DeleteIcon />}
+              />
+            ))}
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowAddTagDialog(false)}>Cancelar</Button>
@@ -1249,7 +1274,8 @@ export default function StageDetail() {
           </Typography>
           {(tagToDelete?.usage_count ?? 0) > 0 && (
             <Alert severity="warning" sx={{ mt: 2 }}>
-              Esta etiqueta está asignada a {tagToDelete?.usage_count} etapa(s). Al eliminarla también se eliminarán todas sus asignaciones.
+              Esta etiqueta está asignada a {tagToDelete?.usage_count} etapa(s). Se quitará de la lista de
+              etiquetas disponibles, pero las etapas que ya la tienen la conservarán.
             </Alert>
           )}
         </DialogContent>
