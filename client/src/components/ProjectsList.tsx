@@ -27,6 +27,7 @@ import {
   clearProjectReturnSnapshot,
   filtersMatch,
   readProjectReturnSnapshot,
+  saveProjectReturnSnapshot,
   type ProjectReturnFilters,
 } from '../utils/projectReturnSnapshot';
 
@@ -164,6 +165,25 @@ export default function ProjectsList() {
     showFilters,
   }), [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters]);
 
+  // Capture any navigation into a project or stage detail (card icon AND the
+  // in-progress stage links) so the dashboard restores scroll on return.
+  const handleListNavigation = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    const anchor = target.closest('a[href^="/projects/"], a[href^="/stages/"]');
+    if (!anchor) return;
+
+    const href = anchor.getAttribute('href') ?? '';
+    const match = href.match(/^\/projects\/(\d+)/);
+    saveProjectReturnSnapshot({
+      dashboardKey: location.key,
+      projectId: match ? Number(match[1]) : 0,
+      filters: currentFilters,
+      scrollY: window.scrollY,
+      viewportHeight: window.innerHeight,
+      savedAt: Date.now(),
+    });
+  };
+
   // Restore only the snapshot captured for this dashboard history entry.
   useEffect(() => {
     if (loading) return;
@@ -187,7 +207,7 @@ export default function ProjectsList() {
       const maximum = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       window.scrollTo(0, Math.min(snapshot.scrollY, maximum));
       attempts += 1;
-      if (attempts >= 8) {
+      if (attempts >= 20) {
         clearProjectReturnSnapshot(snapshot.projectId);
         return;
       }
@@ -316,7 +336,7 @@ export default function ProjectsList() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
+    <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }} onClick={handleListNavigation}>
       <Box sx={{ 
         mb: 3, 
         display: 'flex', 

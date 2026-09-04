@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Container,
@@ -29,14 +29,13 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiClient, type Stage, type User, type Client } from '../services/apiClient';
 import DeadlineChip from './DeadlineChip';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
+import { useScrollRestoration } from '../utils/useScrollRestoration';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'intermediate_date';
 
 const STORAGE_KEY = 'allStagesView_filters';
-const SCROLL_KEY = 'allStagesView_scroll';
 
 export default function AllStagesView() {
-  const scrollPositionRef = useRef<number>(0);
   const [stages, setStages] = useState<Stage[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -96,6 +95,9 @@ export default function AllStagesView() {
   // A chat-driven stage mutation refreshes this view in place.
   useAssistantRefetch(['stages'], fetchData);
 
+  // Restore the scroll position when returning to this list (history POP).
+  useScrollRestoration('stages', !loading);
+
   // Guardar filtros en sessionStorage cuando cambien
   useEffect(() => {
     const filters = {
@@ -109,28 +111,6 @@ export default function AllStagesView() {
     };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
   }, [searchTerm, selectedUser, selectedClient, deadlineFrom, deadlineTo, sortBy, showFilters]);
-
-  // Guardar posición de scroll antes de navegar
-  useEffect(() => {
-    const handleScroll = () => {
-      scrollPositionRef.current = window.scrollY;
-      sessionStorage.setItem(SCROLL_KEY, window.scrollY.toString());
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Restaurar posición de scroll cuando se carga la página
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-    if (savedScroll && !loading) {
-      // Usar setTimeout para asegurarse de que el DOM esté completamente renderizado
-      setTimeout(() => {
-        window.scrollTo(0, parseInt(savedScroll, 10));
-      }, 100);
-    }
-  }, [loading]);
 
   // Filtrar y ordenar etapas - SOLO MOSTRAR ETAPAS EN PROCESO
   const filteredAndSortedStages = useMemo(() => {
@@ -509,11 +489,6 @@ export default function AllStagesView() {
                       ? recentComment.content.substring(0, 150) + '...' 
                       : recentComment.content)
                   : null;
-                
-                const handleStageClick = () => {
-                  // Guardar posición de scroll antes de navegar
-                  sessionStorage.setItem(SCROLL_KEY, window.scrollY.toString());
-                };
 
                 return (
                   <>
@@ -521,7 +496,6 @@ export default function AllStagesView() {
                       key={stage.id}
                       component={RouterLink}
                       to={`/stages/${stage.id}`}
-                      onClick={handleStageClick}
                       sx={{
                         textDecoration: 'none',
                         cursor: 'pointer',

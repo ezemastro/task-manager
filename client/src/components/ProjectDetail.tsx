@@ -36,6 +36,7 @@ import StageCard from './StageCard';
 import DeadlineChip from './DeadlineChip';
 import { clearProjectReturnSnapshot } from '../utils/projectReturnSnapshot';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
+import { useScrollRestoration } from '../utils/useScrollRestoration';
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -53,8 +54,8 @@ export default function ProjectDetail() {
   const [deletingStage, setDeletingStage] = useState(false);
   const [stageLifecycleLoading, setStageLifecycleLoading] = useState(false);
   
-  // Storage key para el scroll
-  const SCROLL_KEY = `projectDetail_scroll_${id}`;
+  // Restore the scroll position when returning to this project (history POP).
+  useScrollRestoration(`project:${id}`, !loading);
 
   const fetchProjectDetail = useCallback(async () => {
     if (!id) return;
@@ -80,29 +81,8 @@ export default function ProjectDetail() {
   // A chat-driven mutation on this project or its stages refreshes it in place.
   useAssistantRefetch(['stages', `project:${id}`], fetchProjectDetail);
 
-  // Guardar posición de scroll mientras navegas por la página
-  useEffect(() => {
-    const handleScroll = () => {
-      sessionStorage.setItem(SCROLL_KEY, window.scrollY.toString());
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [SCROLL_KEY]);
-  
-  // Restaurar scroll cuando se carga la página
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-    if (savedScroll && !loading) {
-      setTimeout(() => {
-        window.scrollTo(0, parseInt(savedScroll, 10));
-      }, 100);
-    }
-  }, [loading, SCROLL_KEY]);
-
-  // Función para volver atrás limpiando el scroll guardado
+  // Función para volver atrás
   const handleBack = () => {
-    sessionStorage.removeItem(SCROLL_KEY);
     navigate(-1);
   };
 
