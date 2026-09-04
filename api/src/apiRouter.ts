@@ -9,6 +9,22 @@ export const apiRouter = Router();
 // Proteger todas las rutas del API con autenticación
 apiRouter.use(authMiddleware);
 
+// Suma N días hábiles (lunes a viernes) a una fecha, salteando sábados y
+// domingos. Se usa para calcular la fecha límite estimada por defecto de una
+// etapa a partir de su fecha de inicio y la duración de su plantilla.
+function addBusinessDays(from: Date, days: number): Date {
+  const result = new Date(from);
+  let remaining = days;
+  while (remaining > 0) {
+    result.setDate(result.getDate() + 1);
+    const dayOfWeek = result.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      remaining -= 1;
+    }
+  }
+  return result;
+}
+
 // Email del super administrador global (dueño de la plataforma).
 const SUPER_ADMIN_EMAIL = 'marcelomastropietro@gmail.com';
 
@@ -959,15 +975,11 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
             startDate = new Date().toISOString();
           }
           
-          if (template.estimated_duration_days) {
-            const endDate = new Date();
-            if (index > 0 && templates[index - 1].estimated_duration_days) {
-              // Acumular días de etapas anteriores
-              const previousDays = templates.slice(0, index).reduce((sum, t) => sum + (t.estimated_duration_days || 0), 0);
-              endDate.setDate(endDate.getDate() + previousDays);
-            }
-            endDate.setDate(endDate.getDate() + template.estimated_duration_days);
-            estimatedEndDate = endDate.toISOString();
+          // La primera etapa recibe su fecha límite estimada por defecto
+          // contando días hábiles desde hoy; las siguientes quedan sin fecha
+          // límite hasta que se inicien (se calcula en /stages/:id/start).
+          if (index === 0 && template.estimated_duration_days) {
+            estimatedEndDate = addBusinessDays(new Date(), template.estimated_duration_days).toISOString();
           }
           
           insertStage.run([
@@ -1936,10 +1948,39 @@ apiRouter.put('/stages/:id/start', (req: Request, res: Response) => {
         });
         return;
       }
-      db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.organization_id = ?', [stageId, req.user!.organizationId], (lookupErr, row: any) => {
-        if (!lookupErr && row) logAudit({ organizationId: row.organization_id, userId: req.user!.userId, action: 'START', entityType: 'stage', entityId: stageId, projectName: row.project_name, details: JSON.stringify({ stage_name: row.name, project_name: row.project_name }), ipAddress: req.ip });
-      });
-      res.json({ message: 'Etapa iniciada exitosamente' });
+      // Default estimated end date: when the stage came from a template with
+      // a duration and no end date was set yet (not manually edited), compute
+      // it from the real start date counting only business days.
+      db.get(
+        `SELECT s.start_date, t.estimated_duration_days
+         FROM stages s
+         LEFT JOIN stage_templates t ON s.template_id = t.id
+         WHERE s.id = ?`,
+        [stageId],
+        (lookupErr, row: any) => {
+          if (!lookupErr && row && row.estimated_duration_days && row.estimated_duration_days > 0) {
+            const startDate = new Date(row.start_date);
+            if (!Number.isNaN(startDate.getTime())) {
+              const computedEnd = addBusinessDays(startDate, row.estimated_duration_days).toISOString();
+              db.run(
+                'UPDATE stages SET estimated_end_date = ? WHERE id = ? AND estimated_end_date IS NULL',
+                [computedEnd, stageId],
+                () => {
+                  db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.organization_id = ?', [stageId, req.user!.organizationId], (auditErr, auditRow: any) => {
+                    if (!auditErr && auditRow) logAudit({ organizationId: auditRow.organization_id, userId: req.user!.userId, action: 'START', entityType: 'stage', entityId: stageId, projectName: auditRow.project_name, details: JSON.stringify({ stage_name: auditRow.name, project_name: auditRow.project_name }), ipAddress: req.ip });
+                  });
+                  res.json({ message: 'Etapa iniciada exitosamente' });
+                }
+              );
+              return;
+            }
+          }
+          db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ? AND p.organization_id = ?', [stageId, req.user!.organizationId], (lookupErr2, row2: any) => {
+            if (!lookupErr2 && row2) logAudit({ organizationId: row2.organization_id, userId: req.user!.userId, action: 'START', entityType: 'stage', entityId: stageId, projectName: row2.project_name, details: JSON.stringify({ stage_name: row2.name, project_name: row2.project_name }), ipAddress: req.ip });
+          });
+          res.json({ message: 'Etapa iniciada exitosamente' });
+        }
+      );
     });
   });
 });
