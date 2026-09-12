@@ -958,65 +958,88 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
       return res.status(500).json({ error: err.message });
     }
 
-    // Si hay plantillas de etapas, crear las etapas iniciales
-    db.all('SELECT * FROM stage_templates ORDER BY order_number', [], (err, templates: any[]) => {
-      if (!err && templates && templates.length > 0) {
-        const projectId = this.lastID;
-        const insertStage = db.prepare(
-          'INSERT INTO stages (project_id, template_id, name, responsible_id, order_number, estimated_end_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        );
-        
-        templates.forEach((template, index) => {
-          let estimatedEndDate = null;
-          let startDate = null;
-          
-          // La primera etapa comienza inmediatamente
-          if (index === 0) {
-            startDate = new Date().toISOString();
-          }
-          
-          // La primera etapa recibe su fecha límite estimada por defecto
-          // contando días hábiles desde hoy; las siguientes quedan sin fecha
-          // límite hasta que se inicien (se calcula en /stages/:id/start).
-          if (index === 0 && template.estimated_duration_days) {
-            estimatedEndDate = addBusinessDays(new Date(), template.estimated_duration_days).toISOString();
-          }
-          
-          insertStage.run([
-            projectId,
-            template.id,
-            template.name,
-            template.default_responsible_id,
-            template.order_number,
-            estimatedEndDate,
-            startDate
-          ]);
-        });
-        insertStage.finalize();
-      }
-    });
-
+    // Si hay plantillas de etapas de ESTA organización, crear las etapas iniciales
     const projectId = this.lastID;
-    
-    logAudit({
-      organizationId,
-      userId: req.user!.userId,
-      action: 'CREATE',
-      entityType: 'project',
-      entityId: projectId,
-      projectName: name,
-      details: JSON.stringify({ name, description, contact: normalizedContact, client_id, responsible_id, deadline }),
-      ipAddress: req.ip
-    });
 
-    res.status(201).json({
-      id: projectId,
-      name,
-      description,
-      contact: normalizedContact,
-      client_id,
-      deadline,
-      message: 'Proyecto creado exitosamente'
+    const finishSuccess = () => {
+      logAudit({
+        organizationId,
+        userId: req.user!.userId,
+        action: 'CREATE',
+        entityType: 'project',
+        entityId: projectId,
+        projectName: name,
+        details: JSON.stringify({ name, description, contact: normalizedContact, client_id, responsible_id, deadline }),
+        ipAddress: req.ip
+      });
+
+      res.status(201).json({
+        id: projectId,
+        name,
+        description,
+        contact: normalizedContact,
+        client_id,
+        deadline,
+        message: 'Proyecto creado exitosamente'
+      });
+    };
+
+    db.all('SELECT * FROM stage_templates WHERE organization_id = ? ORDER BY order_number', [organizationId], (err, templates: any[]) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!templates || templates.length === 0) {
+        finishSuccess();
+        return;
+      }
+
+      const insertStage = db.prepare(
+        'INSERT INTO stages (project_id, template_id, name, responsible_id, order_number, estimated_end_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      );
+      let stageError: Error | null = null;
+      let done = 0;
+      const total = templates.length;
+
+      templates.forEach((template, index) => {
+        let estimatedEndDate = null;
+        let startDate = null;
+        
+        // La primera etapa comienza inmediatamente
+        if (index === 0) {
+          startDate = new Date().toISOString();
+        }
+        
+        // La primera etapa recibe su fecha límite estimada por defecto
+        // contando días hábiles desde hoy; las siguientes quedan sin fecha
+        // límite hasta que se inicien (se calcula en /stages/:id/start).
+        if (index === 0 && template.estimated_duration_days) {
+          estimatedEndDate = addBusinessDays(new Date(), template.estimated_duration_days).toISOString();
+        }
+        
+        insertStage.run([
+          projectId,
+          template.id,
+          template.name,
+          template.default_responsible_id,
+          template.order_number,
+          estimatedEndDate,
+          startDate
+        ], function (runErr) {
+          if (runErr && !stageError) stageError = runErr;
+          done += 1;
+          if (done !== total) return;
+          insertStage.finalize();
+          if (stageError) {
+            // Rollback: un proyecto sin sus etapas no debe quedar creado.
+            db.run('DELETE FROM projects WHERE id = ?', [projectId], () => {
+              res.status(500).json({ error: stageError!.message });
+            });
+            return;
+          }
+          finishSuccess();
+        });
+      });
     });
   });
 });
