@@ -64,6 +64,12 @@ export default function SummaryView() {
     currentYear,
   ])).sort((a, b) => b - a);
 
+  // Hide stages without recorded duration. A stage with zero days but delayed
+  // cycles stays visible so the delay is not silently discarded.
+  const visibleStages = (summary?.stages ?? []).filter(
+    (stage) => stage.total_days > 0 || stage.delayed_cycles > 0,
+  );
+
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2} sx={{ mb: 4 }}>
@@ -114,13 +120,13 @@ export default function SummaryView() {
                 <CalendarMonthIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>Rendimiento por etapa</Typography>
               </Stack>
-              {summary.stages.length === 0 ? (
-                <Typography color="text.secondary">No hay etapas registradas en proyectos completados durante este año.</Typography>
+              {visibleStages.length === 0 ? (
+                <Typography color="text.secondary">No hay etapas con actividad registrada en proyectos completados durante este año.</Typography>
               ) : (
                 <TableContainer>
                   <Table size="small">
                     <TableHead><TableRow><TableCell>Etapa</TableCell><TableCell align="right">Días totales</TableCell><TableCell align="right">Ciclos demorados</TableCell></TableRow></TableHead>
-                    <TableBody>{summary.stages.map((stage) => <TableRow key={stage.stage_name}><TableCell sx={{ fontWeight: 600 }}>{stage.stage_name}</TableCell><TableCell align="right">{stage.total_days}</TableCell><TableCell align="right">{stage.delayed_cycles}</TableCell></TableRow>)}</TableBody>
+                    <TableBody>{visibleStages.map((stage) => <TableRow key={stage.stage_name}><TableCell sx={{ fontWeight: 600 }}>{stage.stage_name}</TableCell><TableCell align="right">{stage.total_days}</TableCell><TableCell align="right">{stage.delayed_cycles}</TableCell></TableRow>)}</TableBody>
                   </Table>
                 </TableContainer>
               )}
