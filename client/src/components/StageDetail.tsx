@@ -1272,10 +1272,9 @@ export default function StageDetail() {
             ¿Estás seguro de que quieres eliminar la etiqueta "{tagToDelete?.name}"?
             Esta acción no se puede deshacer.
           </Typography>
-          {(tagToDelete?.usage_count ?? 0) > 0 && (
+          {((tagToDelete?.usage_count ?? 0) > 0 || (tagToDelete?.project_usage_count ?? 0) > 0) && (
             <Alert severity="warning" sx={{ mt: 2 }}>
-              Esta etiqueta está asignada a {tagToDelete?.usage_count} etapa(s). Se quitará de la lista de
-              etiquetas disponibles, pero las etapas que ya la tienen la conservarán.
+              Esta etiqueta está asignada a {tagToDelete?.usage_count ?? 0} etapa(s) y {tagToDelete?.project_usage_count ?? 0} proyecto(s). Se quitará de todas las etapas y proyectos al eliminarla.
             </Alert>
           )}
         </DialogContent>

@@ -24,6 +24,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import LabelIcon from '@mui/icons-material/Label';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import PauseCircleIcon from '@mui/icons-material/PauseCircle';
@@ -34,6 +35,7 @@ import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
 import DeadlineChip from './DeadlineChip';
+import ProjectTagsDialog from './ProjectTagsDialog';
 import { clearProjectReturnSnapshot } from '../utils/projectReturnSnapshot';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
 import { useScrollRestoration } from '../utils/useScrollRestoration';
@@ -48,6 +50,7 @@ export default function ProjectDetail() {
   const [showCreateStageModal, setShowCreateStageModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showTagsDialog, setShowTagsDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
@@ -57,10 +60,10 @@ export default function ProjectDetail() {
   // Restore the scroll position when returning to this project (history POP).
   useScrollRestoration(`project:${id}`, !loading);
 
-  const fetchProjectDetail = useCallback(async () => {
+  const fetchProjectDetail = useCallback(async (silent = false) => {
     if (!id) return;
     
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError('');
     try {
       const projectData = await apiClient.getProject(Number(id));
@@ -70,7 +73,7 @@ export default function ProjectDetail() {
       const message = err instanceof Error ? err.message : 'Error al cargar proyecto';
       setError(message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
@@ -355,6 +358,28 @@ export default function ProjectDetail() {
             {project.description || 'Sin descripción'}
           </Typography>
 
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+            {(project.tags ?? []).map((tag) => (
+              <Chip
+                key={tag.id}
+                label={tag.name}
+                size="small"
+                sx={{
+                  bgcolor: tag.color || undefined,
+                  color: tag.color ? '#fff' : undefined,
+                }}
+              />
+            ))}
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<LabelIcon />}
+              onClick={() => setShowTagsDialog(true)}
+            >
+              Agregar etiqueta
+            </Button>
+          </Stack>
+
           <Divider sx={{ my: 2 }} />
 
           <Stack spacing={2}>
@@ -566,6 +591,15 @@ export default function ProjectDetail() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ProjectTagsDialog
+        open={showTagsDialog}
+        projectId={Number(id)}
+        projectName={project.name}
+        assignedTags={project.tags ?? []}
+        onClose={() => setShowTagsDialog(false)}
+        onChanged={() => fetchProjectDetail(true)}
+      />
     </Container>
   );
 }

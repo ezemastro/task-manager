@@ -5,6 +5,7 @@ export interface ProjectReturnFilters {
   dateFilter: string;
   sortBy: string;
   showFilters: boolean;
+  selectedTag: string;
 }
 
 export interface ProjectReturnSnapshot {
@@ -86,6 +87,7 @@ export function readProjectReturnSnapshot(): ProjectReturnSnapshot | null {
         dateFilter: filters.dateFilter,
         sortBy: filters.sortBy,
         showFilters: filters.showFilters,
+        selectedTag: typeof filters.selectedTag === 'string' ? filters.selectedTag : '',
       },
       scrollY,
       viewportHeight,
@@ -103,6 +105,7 @@ export function filtersMatch(a: ProjectReturnFilters, b: ProjectReturnFilters): 
     a.selectedResponsible === b.selectedResponsible &&
     a.dateFilter === b.dateFilter &&
     a.sortBy === b.sortBy &&
-    a.showFilters === b.showFilters
+    a.showFilters === b.showFilters &&
+    a.selectedTag === b.selectedTag
   );
 }

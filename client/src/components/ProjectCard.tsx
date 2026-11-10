@@ -7,11 +7,14 @@ import {
   LinearProgress,
   Stack,
   IconButton,
+  Chip,
+  Tooltip,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BusinessIcon from '@mui/icons-material/Business';
 import PersonIcon from '@mui/icons-material/Person';
-import type { Stage } from '../services/apiClient';
+import LabelIcon from '@mui/icons-material/Label';
+import type { Stage, Tag } from '../services/apiClient';
 import StageInProgressCard from './StageInProgressCard';
 import DeadlineChip from './DeadlineChip';
 import { saveProjectReturnSnapshot, type ProjectReturnFilters } from '../utils/projectReturnSnapshot';
@@ -24,7 +27,9 @@ interface ProjectCardProps {
   responsibleName?: string;
   deadline?: string;
   stages: Stage[];
+  tags?: Tag[];
   onStageCompleted?: () => void;
+  onEditTags?: () => void;
   dashboardLocationKey?: string;
   filters?: ProjectReturnFilters;
 }
@@ -37,8 +42,10 @@ export default function ProjectCard({
   responsibleName,
   deadline,
   stages,
+  tags,
   dashboardLocationKey,
   filters,
+  onEditTags,
 }: ProjectCardProps) {
   const completedStages = stages.filter(stage => stage.is_completed).length;
   const totalStages = stages.length;
@@ -135,6 +142,23 @@ export default function ProjectCard({
                   showIcon={true}
                 />
               )}
+              {tags && tags.length > 0 && (
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ flexShrink: 0 }}>
+                  {tags.map((tag) => (
+                    <Chip
+                      key={tag.id}
+                      label={tag.name}
+                      size="small"
+                      clickable={Boolean(onEditTags)}
+                      onClick={onEditTags}
+                      sx={{
+                        bgcolor: tag.color || undefined,
+                        color: tag.color ? '#fff' : undefined,
+                      }}
+                    />
+                  ))}
+                </Stack>
+              )}
             </Stack>
           </Box>
           
@@ -160,6 +184,22 @@ export default function ProjectCard({
           >
             <OpenInNewIcon />
           </IconButton>
+          {onEditTags && (
+            <Tooltip title="Agregar etiqueta">
+              <IconButton
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onEditTags();
+                }}
+                size="small"
+                aria-label="Agregar etiqueta"
+                sx={{ flexShrink: 0 }}
+              >
+                <LabelIcon />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         {/* Etapas en proceso - Layout horizontal compacto */}

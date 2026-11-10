@@ -19,8 +19,9 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { apiClient, type Project, type Stage, type Client, type User } from '../services/apiClient';
+import { apiClient, type Project, type Stage, type Client, type User, type Tag } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
+import ProjectTagsDialog from './ProjectTagsDialog';
 import CreateProjectModal from './CreateProjectModal';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
 import {
@@ -46,6 +47,7 @@ export interface ProjectsListFilters extends ProjectReturnFilters {
   dateFilter: string;
   sortBy: SortOption;
   showFilters: boolean;
+  selectedTag: string;
 }
 
 const DEFAULT_FILTERS: ProjectsListFilters = {
@@ -55,6 +57,7 @@ const DEFAULT_FILTERS: ProjectsListFilters = {
   dateFilter: 'all',
   sortBy: 'recent',
   showFilters: true,
+  selectedTag: '',
 };
 
 function readStoredFilters(): ProjectsListFilters {
@@ -79,6 +82,7 @@ function readStoredFilters(): ProjectsListFilters {
         ? candidate.sortBy as SortOption
         : DEFAULT_FILTERS.sortBy,
       showFilters: typeof candidate.showFilters === 'boolean' ? candidate.showFilters : DEFAULT_FILTERS.showFilters,
+      selectedTag: typeof candidate.selectedTag === 'string' ? candidate.selectedTag : DEFAULT_FILTERS.selectedTag,
     };
   } catch {
     return DEFAULT_FILTERS;
@@ -89,9 +93,11 @@ export default function ProjectsList() {
   const [projects, setProjects] = useState<ProjectWithStages[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [tagDialogProject, setTagDialogProject] = useState<ProjectWithStages | null>(null);
   
   // Restore filters lazily so the first persistence effect does not overwrite them.
   const [initialFilters] = useState<ProjectsListFilters>(() => readStoredFilters());
@@ -101,20 +107,23 @@ export default function ProjectsList() {
   const [dateFilter, setDateFilter] = useState(initialFilters.dateFilter);
   const [sortBy, setSortBy] = useState<SortOption>(initialFilters.sortBy);
   const [showFilters, setShowFilters] = useState(initialFilters.showFilters);
+  const [selectedTag, setSelectedTag] = useState(initialFilters.selectedTag);
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchProjects = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
 
     try {
-      const [projectsList, clientsList, usersList] = await Promise.all([
+      const [projectsList, clientsList, usersList, tagsList] = await Promise.all([
         apiClient.getProjects({status: "active"}),
         apiClient.getClients(),
         apiClient.getUsers(),
+        apiClient.getTags(),
       ]);
       
       setClients(clientsList);
       setUsers(usersList);
+      setTags(tagsList);
       
       // Cargar cada proyecto con sus etapas
       const projectsWithStages = await Promise.all(
@@ -125,11 +134,18 @@ export default function ProjectsList() {
       );
 
       setProjects(projectsWithStages);
+      if (silent) {
+        // Mantener el diálogo montado y sincronizado con los datos nuevos.
+        setTagDialogProject((current) => {
+          if (!current) return null;
+          return projectsWithStages.find((p) => p.id === current.id) ?? null;
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar los proyectos';
       setError(message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -140,6 +156,14 @@ export default function ProjectsList() {
   // A chat-driven project mutation refreshes this list in place.
   useAssistantRefetch(['projects'], fetchProjects);
 
+  // Clear a restored selected-tag filter if that tag no longer exists.
+  useEffect(() => {
+    if (loading || !selectedTag) return;
+    if (!tags.some((tag) => tag.id.toString() === selectedTag)) {
+      setSelectedTag('');
+    }
+  }, [loading, tags, selectedTag]);
+
   useEffect(() => {
     try {
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
@@ -149,11 +173,12 @@ export default function ProjectsList() {
         dateFilter,
         sortBy,
         showFilters,
+        selectedTag,
       }));
     } catch {
       // Storage can be unavailable or read-only in restricted browser contexts.
     }
-  }, [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters]);
+  }, [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters, selectedTag]);
 
   const location = useLocation();
   const currentFilters = useMemo<ProjectsListFilters>(() => ({
@@ -163,7 +188,8 @@ export default function ProjectsList() {
     dateFilter,
     sortBy,
     showFilters,
-  }), [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters]);
+    selectedTag,
+  }), [searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, showFilters, selectedTag]);
 
   // Capture any navigation into a project or stage detail (card icon AND the
   // in-progress stage links) so the dashboard restores scroll on return.
@@ -246,6 +272,11 @@ export default function ProjectsList() {
       filtered = filtered.filter((p) => p.responsible_id?.toString() === selectedResponsible);
     }
 
+    // Filtro por etiqueta
+    if (selectedTag) {
+      filtered = filtered.filter((p) => p.tags?.some((tag) => tag.id.toString() === selectedTag));
+    }
+
     // Filtro por fecha
     if (dateFilter !== 'all' && filtered.length > 0) {
       const today = new Date();
@@ -305,7 +336,7 @@ export default function ProjectsList() {
     });
 
     return filtered;
-  }, [projects, searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy]);
+  }, [projects, searchTerm, selectedClient, selectedResponsible, dateFilter, sortBy, selectedTag]);
 
   const handleRefresh = () => {
     fetchProjects();
@@ -435,6 +466,26 @@ export default function ProjectsList() {
 
               <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 200px' }, minWidth: { xs: '100%', sm: '150px' } }}>
                 <FormControl fullWidth>
+                  <InputLabel>Etiqueta</InputLabel>
+                  <Select
+                    value={selectedTag}
+                    onChange={(e) => setSelectedTag(e.target.value)}
+                    label="Etiqueta"
+                  >
+                    <MenuItem value="">
+                      <em>Todas las etiquetas</em>
+                    </MenuItem>
+                    {tags.map((tag) => (
+                      <MenuItem key={tag.id} value={tag.id.toString()}>
+                        {tag.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <Box sx={{ flex: { xs: '1 1 100%', sm: '1 1 200px' }, minWidth: { xs: '100%', sm: '150px' } }}>
+                <FormControl fullWidth>
                   <InputLabel>Fecha Límite</InputLabel>
                   <Select
                     value={dateFilter}
@@ -494,6 +545,13 @@ export default function ProjectsList() {
                     onDelete={() => setSelectedResponsible('')}
                   />
                 )}
+                {selectedTag && (
+                  <Chip
+                    label={`Etiqueta: ${tags.find(t => t.id.toString() === selectedTag)?.name ?? selectedTag}`}
+                    size="small"
+                    onDelete={() => setSelectedTag('')}
+                  />
+                )}
                 {dateFilter !== 'all' && (
                   <Chip
                     label={`Fecha: ${dateFilter}`}
@@ -501,13 +559,14 @@ export default function ProjectsList() {
                     onDelete={() => setDateFilter('all')}
                   />
                 )}
-                {(searchTerm || selectedClient || selectedResponsible || dateFilter !== 'all') && (
+                {(searchTerm || selectedClient || selectedResponsible || selectedTag || dateFilter !== 'all') && (
                   <Button
                     size="small"
                     onClick={() => {
                       setSearchTerm('');
                       setSelectedClient('');
                       setSelectedResponsible('');
+                      setSelectedTag('');
                       setDateFilter('all');
                     }}
                   >
@@ -545,9 +604,11 @@ export default function ProjectsList() {
               responsibleName={project.responsible_name}
               deadline={project.deadline}
               stages={project.stages}
+              tags={project.tags}
               dashboardLocationKey={location.key}
               filters={currentFilters}
               onStageCompleted={handleRefresh}
+              onEditTags={() => setTagDialogProject(project)}
             />
           ))}
         </Stack>
@@ -560,6 +621,15 @@ export default function ProjectsList() {
           setShowCreateProject(false);
           handleRefresh();
         }}
+      />
+
+      <ProjectTagsDialog
+        open={tagDialogProject !== null}
+        projectId={tagDialogProject?.id ?? 0}
+        projectName={tagDialogProject?.name ?? ''}
+        assignedTags={tagDialogProject?.tags ?? []}
+        onClose={() => setTagDialogProject(null)}
+        onChanged={() => fetchProjects(true)}
       />
     </Container>
   );
