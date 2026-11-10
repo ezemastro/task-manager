@@ -65,7 +65,7 @@ export default function ProjectTagsDialog({
     setLoading(true);
     setError('');
     apiClient
-      .getTags()
+      .getProjectTagOptions()
       .then((tags) => setAllTags(tags))
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Error al cargar las etiquetas');
@@ -133,8 +133,8 @@ export default function ProjectTagsDialog({
     setBusy(true);
     setError('');
     try {
-      await apiClient.updateTag(editingTagId, { name: editName.trim(), color: editColor });
-      const refreshed = await apiClient.getTags();
+      await apiClient.updateProjectTagOption(editingTagId, { name: editName.trim(), color: editColor });
+      const refreshed = await apiClient.getProjectTagOptions();
       setAllTags(refreshed);
       setEditingTagId(null);
       setEditName('');
@@ -152,8 +152,8 @@ export default function ProjectTagsDialog({
     setDeletingTag(true);
     setError('');
     try {
-      await apiClient.deleteTag(tagToDelete.id);
-      const refreshed = await apiClient.getTags();
+      await apiClient.deleteProjectTagOption(tagToDelete.id);
+      const refreshed = await apiClient.getProjectTagOptions();
       setAllTags(refreshed);
       setLocalAssigned((prev) => prev.filter((id) => id !== tagToDelete.id));
       setTagToDelete(null);
@@ -170,8 +170,8 @@ export default function ProjectTagsDialog({
     setBusy(true);
     setError('');
     try {
-      const created = await apiClient.createTag({ name: newTagName.trim(), color: newTagColor });
-      const refreshed = await apiClient.getTags();
+      const created = await apiClient.createProjectTagOption({ name: newTagName.trim(), color: newTagColor });
+      const refreshed = await apiClient.getProjectTagOptions();
       setAllTags(refreshed);
       await apiClient.addTagToProject(projectId, { tag_id: created.id });
       setLocalAssigned((prev) => (prev.includes(created.id) ? prev : [...prev, created.id]));
@@ -359,7 +359,7 @@ export default function ProjectTagsDialog({
             ¿Estás seguro de que quieres eliminar la etiqueta &quot;{tagToDelete?.name}&quot;? Esta acción no se puede deshacer.
           </Typography>
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Eliminar esta etiqueta también la quitará de los proyectos y etapas que la tengan asignada.
+            Eliminar esta etiqueta la quitará de todos los proyectos que la tengan asignada. Las etiquetas de las etapas no se ven afectadas.
           </Alert>
         </DialogContent>
         <DialogActions>

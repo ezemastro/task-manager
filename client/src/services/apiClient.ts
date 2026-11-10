@@ -134,7 +134,6 @@ export interface Tag {
   color?: string;
   created_at: string;
   usage_count?: number;
-  project_usage_count?: number;
 }
 
 export interface Comment {
@@ -578,6 +577,28 @@ class ApiClient {
 
   async deleteTag(id: number): Promise<{ message: string }> {
     const { data } = await this.api.delete(`/tags/${id}`);
+    return data;
+  }
+
+  // ==================== PROJECT TAGS (catálogo propio, separado de stage tags) ====================
+
+  async getProjectTagOptions(): Promise<Tag[]> {
+    const { data } = await this.api.get<Tag[]>('/project-tags');
+    return data;
+  }
+
+  async createProjectTagOption(requestData: CreateTagRequest): Promise<{ id: number; message: string } & CreateTagRequest> {
+    const { data } = await this.api.post(`/project-tags`, requestData);
+    return data;
+  }
+
+  async updateProjectTagOption(id: number, requestData: UpdateTagRequest): Promise<{ message: string }> {
+    const { data } = await this.api.put(`/project-tags/${id}`, requestData);
+    return data;
+  }
+
+  async deleteProjectTagOption(id: number): Promise<{ message: string }> {
+    const { data } = await this.api.delete(`/project-tags/${id}`);
     return data;
   }
 

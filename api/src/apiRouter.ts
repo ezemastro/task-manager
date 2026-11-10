@@ -300,16 +300,78 @@ function initializeDatabase() {
       )
     `);
 
-    // Tabla de relación proyecto-etiqueta
+    // Catálogo de etiquetas de proyecto (independiente de las etiquetas de etapas)
     db.run(`
-      CREATE TABLE IF NOT EXISTS project_tags (
-        project_id INTEGER NOT NULL,
-        tag_id INTEGER NOT NULL,
-        PRIMARY KEY (project_id, tag_id),
-        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-        FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+      CREATE TABLE IF NOT EXISTS project_tag_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        UNIQUE(organization_id, name)
       )
     `);
+
+    // Tabla de relación proyecto-etiqueta de proyecto
+    db.run(`
+      CREATE TABLE IF NOT EXISTS project_tag_assignments (
+        project_id INTEGER NOT NULL,
+        project_tag_id INTEGER NOT NULL,
+        PRIMARY KEY (project_id, project_tag_id),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_tag_id) REFERENCES project_tag_options(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Migración única: si existe la tabla legacy project_tags, copiar sus datos
+    // al catálogo separado de etiquetas de proyecto y luego eliminarla. En
+    // instalaciones nuevas la tabla legacy no existe y la migración se omite.
+    // Debe ejecutarse dentro de serialize() para que las tablas nuevas ya existan.
+    db.get(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'project_tags'",
+      (legacyErr: Error | null, legacyRow: any) => {
+        if (legacyErr) {
+          console.error('Error al verificar la tabla legacy project_tags:', legacyErr.message);
+          return;
+        }
+        if (!legacyRow) {
+          // Instalación nueva: no hay tabla legacy que migrar.
+          return;
+        }
+        db.run(
+          `INSERT OR IGNORE INTO project_tag_options (organization_id, name, color)
+           SELECT DISTINCT t.organization_id, t.name, t.color
+           FROM project_tags pt INNER JOIN tags t ON t.id = pt.tag_id`,
+          (insErr) => {
+            if (insErr) {
+              console.error('Error al migrar opciones de etiquetas de proyecto:', insErr.message);
+              return;
+            }
+            db.run(
+              `INSERT OR IGNORE INTO project_tag_assignments (project_id, project_tag_id)
+               SELECT pt.project_id, pto.id
+               FROM project_tags pt
+               INNER JOIN tags t ON t.id = pt.tag_id
+               INNER JOIN project_tag_options pto ON pto.organization_id = t.organization_id AND pto.name = t.name`,
+              (assignErr) => {
+                if (assignErr) {
+                  console.error('Error al migrar asignaciones de etiquetas de proyecto:', assignErr.message);
+                  return;
+                }
+                db.run('DROP TABLE project_tags', (dropErr) => {
+                  if (dropErr) {
+                    console.error('Error al eliminar la tabla legacy project_tags:', dropErr.message);
+                    return;
+                  }
+                  console.log('Migración de project_tags completada y tabla legacy eliminada');
+                });
+              }
+            );
+          }
+        );
+      }
+    );
 
     // Tabla de comentarios
     db.run(`
@@ -1111,10 +1173,10 @@ apiRouter.get('/projects', (req: Request, res: Response) => {
     }
 
     const tagsSql = `
-      SELECT pt.project_id, t.id, t.name, t.color
-      FROM project_tags pt
-      INNER JOIN tags t ON t.id = pt.tag_id
-      WHERE pt.project_id IN (${projectIds.map(() => '?').join(',')})
+      SELECT pta.project_id, t.id, t.name, t.color
+      FROM project_tag_assignments pta
+      INNER JOIN project_tag_options t ON t.id = pta.project_tag_id
+      WHERE pta.project_id IN (${projectIds.map(() => '?').join(',')})
       ORDER BY t.name
     `;
 
@@ -1236,9 +1298,9 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
         // Obtener etiquetas a nivel de proyecto
         const projectTagsSql = `
           SELECT t.id, t.name, t.color
-          FROM tags t
-          INNER JOIN project_tags pt ON t.id = pt.tag_id
-          WHERE pt.project_id = ?
+          FROM project_tag_options t
+          INNER JOIN project_tag_assignments pta ON t.id = pta.project_tag_id
+          WHERE pta.project_id = ?
           ORDER BY t.name
         `;
 
@@ -2363,16 +2425,16 @@ apiRouter.post('/projects/:id/tags', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Proyecto no encontrado o no pertenece a tu organización' });
     }
 
-    // Verificar que el tag pertenece a la organización del usuario
-    db.get('SELECT id FROM tags WHERE id = ? AND organization_id = ?', [tag_id, organizationId], (tagErr, tag: any) => {
+    // Verificar que la etiqueta de proyecto pertenece a la organización del usuario
+    db.get('SELECT id FROM project_tag_options WHERE id = ? AND organization_id = ?', [tag_id, organizationId], (tagErr, tag: any) => {
       if (tagErr) {
         return res.status(500).json({ error: tagErr.message });
       }
       if (!tag) {
-        return res.status(404).json({ error: 'Etiqueta no encontrada o no pertenece a tu organización' });
+        return res.status(404).json({ error: 'Etiqueta de proyecto no encontrada o no pertenece a tu organización' });
       }
 
-      const sql = 'INSERT INTO project_tags (project_id, tag_id) VALUES (?, ?)';
+      const sql = 'INSERT INTO project_tag_assignments (project_id, project_tag_id) VALUES (?, ?)';
       db.run(sql, [id, tag_id], function (runErr) {
         if (runErr) {
           if (runErr.message.includes('UNIQUE constraint failed')) {
@@ -2400,16 +2462,16 @@ apiRouter.delete('/projects/:id/tags/:tagId', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Proyecto no encontrado o no pertenece a tu organización' });
     }
 
-    // Verificar que la etiqueta pertenece a la organización del usuario
-    db.get('SELECT id FROM tags WHERE id = ? AND organization_id = ?', [tagId, organizationId], (tagErr, tag: any) => {
+    // Verificar que la etiqueta de proyecto pertenece a la organización del usuario
+    db.get('SELECT id FROM project_tag_options WHERE id = ? AND organization_id = ?', [tagId, organizationId], (tagErr, tag: any) => {
       if (tagErr) {
         return res.status(500).json({ error: tagErr.message });
       }
       if (!tag) {
-        return res.status(404).json({ error: 'Etiqueta no encontrada o no pertenece a tu organización' });
+        return res.status(404).json({ error: 'Etiqueta de proyecto no encontrada o no pertenece a tu organización' });
       }
 
-      const sql = 'DELETE FROM project_tags WHERE project_id = ? AND tag_id = ?';
+      const sql = 'DELETE FROM project_tag_assignments WHERE project_id = ? AND project_tag_id = ?';
       db.run(sql, [id, tagId], function (runErr) {
         if (runErr) {
           return res.status(500).json({ error: runErr.message });
@@ -2459,11 +2521,9 @@ apiRouter.get('/tags', (req: Request, res: Response) => {
   const sql = `
     SELECT
       t.*,
-      COUNT(DISTINCT st.stage_id) as usage_count,
-      COUNT(DISTINCT pt.project_id) as project_usage_count
+      COUNT(DISTINCT st.stage_id) as usage_count
     FROM tags t
     LEFT JOIN stage_tags st ON t.id = st.tag_id
-    LEFT JOIN project_tags pt ON t.id = pt.tag_id
     WHERE t.organization_id = ?
     GROUP BY t.id
     ORDER BY t.name
@@ -2529,6 +2589,98 @@ apiRouter.delete('/tags/:id', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Etiqueta no encontrada' });
     }
     res.json({ message: 'Etiqueta eliminada exitosamente' });
+  });
+});
+
+// ==================== PROJECT TAGS ENDPOINTS ====================
+// Catálogo independiente de etiquetas de proyecto (no afecta a las
+// etiquetas de etapas, que viven en la tabla `tags`).
+
+// Obtener todas las opciones de etiquetas de proyecto con su uso
+apiRouter.get('/project-tags', (req: Request, res: Response) => {
+  const organizationId = req.user!.organizationId;
+
+  const sql = `
+    SELECT
+      t.*,
+      COUNT(DISTINCT pta.project_id) as usage_count
+    FROM project_tag_options t
+    LEFT JOIN project_tag_assignments pta ON t.id = pta.project_tag_id
+    WHERE t.organization_id = ?
+    GROUP BY t.id
+    ORDER BY t.name
+  `;
+
+  db.all(sql, [organizationId], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Crear una nueva opción de etiqueta de proyecto
+apiRouter.post('/project-tags', (req: Request, res: Response) => {
+  const { name, color } = req.body;
+  const organizationId = req.user!.organizationId;
+
+  if (!name) {
+    return res.status(400).json({ error: 'El nombre de la etiqueta es requerido' });
+  }
+
+  const sql = 'INSERT INTO project_tag_options (organization_id, name, color) VALUES (?, ?, ?)';
+  db.run(sql, [organizationId, name, color || null], function (err) {
+    if (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'Ya existe una etiqueta de proyecto con ese nombre en tu organización' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(201).json({
+      id: this.lastID,
+      organization_id: organizationId,
+      name,
+      color,
+      message: 'Etiqueta de proyecto creada exitosamente'
+    });
+  });
+});
+
+// Actualizar una opción de etiqueta de proyecto
+apiRouter.put('/project-tags/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, color } = req.body;
+  const organizationId = req.user!.organizationId;
+
+  const sql = 'UPDATE project_tag_options SET name = COALESCE(?, name), color = COALESCE(?, color) WHERE id = ? AND organization_id = ?';
+  db.run(sql, [name, color, id, organizationId], function (err) {
+    if (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'Ya existe una etiqueta de proyecto con ese nombre en tu organización' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Etiqueta de proyecto no encontrada' });
+    }
+    res.json({ message: 'Etiqueta de proyecto actualizada exitosamente' });
+  });
+});
+
+// Eliminar una opción de etiqueta de proyecto
+apiRouter.delete('/project-tags/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const organizationId = req.user!.organizationId;
+
+  const sql = 'DELETE FROM project_tag_options WHERE id = ? AND organization_id = ?';
+  db.run(sql, [id, organizationId], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Etiqueta de proyecto no encontrada' });
+    }
+    res.json({ message: 'Etiqueta de proyecto eliminada exitosamente' });
   });
 });
 

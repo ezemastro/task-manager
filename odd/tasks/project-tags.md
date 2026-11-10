@@ -54,6 +54,18 @@ tag a project from the list or detail and then filter the list by tag.
 ## Route
 Delegated direct — one bounded writer (6+ non-trivial files). No SDD artifacts.
 
+## Follow-up: separate catalogs (2026-11-10)
+User confirmed that project tags must be a separate catalog from stage tags.
+
+- [x] F1 — Replace `project_tags` with `project_tag_options` (org-scoped name/color)
+  and `project_tag_assignments`; migrate any existing `project_tags` rows by copying
+  names/colors into the new catalog, then drop the legacy table.
+- [x] F2 — Add `/project-tags` CRUD endpoints; project assignment endpoints and project
+  GET queries reference the new catalog.
+- [x] F3 — Project tag dialog uses the project-only catalog; deleting a project tag no
+  longer affects stage tags.
+- [x] F4 — Stage tag counts/warning revert to stage-only semantics.
+
 ## Progress
 - 2026-11-10: Feature branch `feat/project-tags` created. Task document created before
   the first source write.
@@ -75,3 +87,25 @@ Delegated direct — one bounded writer (6+ non-trivial files). No SDD artifacts
   endpoints, rutas de lectura, tipos, diálogo, tarjeta, filtro, detalle y regresiones;
   builds de api y client OK. Queda pendiente un smoke test manual contra una org real
   (aislamiento por org y cascada al borrar etiqueta).
+- 2026-11-10 (catálogos separados — F1-F4): Se separaron las etiquetas de proyecto de las
+  de etapa. Antes reusaban la tabla `tags` vía `project_tags`; ahora existe un catálogo
+  propio `project_tag_options` (org-scoped name/color, UNIQUE(org,name)) y la relación
+  `project_tag_assignments (project_id, project_tag_id)`. El borrado en cascada de
+  `project_tag_options` solo afecta asignaciones de proyecto; las etiquetas de etapa en
+  `tags`/`stage_tags` quedan intactas y viceversa. Migración única en `initializeDatabase`:
+  si existe la legacy `project_tags` (instalaciones previas) copia nombres/colores a
+  `project_tag_options` y las asignaciones a `project_tag_assignments`, luego hace `DROP
+  TABLE project_tags`; en instalaciones nuevas la legacy no existe y se omite (nada que
+  migrar). Endpoints: `GET/POST/PUT/DELETE /project-tags` (catálogo), y
+  `POST/DELETE /projects/:id/tags` validan contra `project_tag_options` e insertan/borran
+  en `project_tag_assignments`. `GET /projects` y `GET /projects/:id` leen el catálogo de
+  proyecto; `GET /tags` volvió a contar solo `stage_tags`. Cliente: nuevos métodos
+  `getProjectTagOptions/createProjectTagOption/updateProjectTagOption/deleteProjectTagOption`;
+  `ProjectTagsDialog` usa el catálogo de proyecto y el aviso de borrado aclara que no
+  afecta etapas; `StageDetail` revirtió el aviso a solo `usage_count`. Builds api y client
+  OK.
+- 2026-11-10 (verificación de catálogos separados): PASS. La migración se movió dentro del
+  bloque `db.serialize` porque la primera prueba sobre una copia de la DB real mostró que el
+  `db.get` externo corría antes de crear `project_tag_options`. Repetida la prueba sobre una
+  copia de la DB de producción con una fila legacy: se copiaron nombre/color y la asignación,
+  y se eliminó `project_tags`. Builds api y client OK; verificación independiente PASS.
