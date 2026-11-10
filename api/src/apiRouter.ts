@@ -300,6 +300,17 @@ function initializeDatabase() {
       )
     `);
 
+    // Tabla de relación proyecto-etiqueta
+    db.run(`
+      CREATE TABLE IF NOT EXISTS project_tags (
+        project_id INTEGER NOT NULL,
+        tag_id INTEGER NOT NULL,
+        PRIMARY KEY (project_id, tag_id),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+      )
+    `);
+
     // Tabla de comentarios
     db.run(`
       CREATE TABLE IF NOT EXISTS comments (
@@ -1088,11 +1099,44 @@ apiRouter.get('/projects', (req: Request, res: Response) => {
     sql += ' HAVING (total_stages - completed_stages) > 0';
   }
 
-  db.all(sql, params, (err, rows) => {
+  db.all(sql, params, (err, rows: any[]) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    res.json(rows);
+
+    // Adjuntar las etiquetas de cada proyecto sin alterar el GROUP BY/HAVING.
+    const projectIds = rows.map((row) => row.id);
+    if (projectIds.length === 0) {
+      return res.json(rows);
+    }
+
+    const tagsSql = `
+      SELECT pt.project_id, t.id, t.name, t.color
+      FROM project_tags pt
+      INNER JOIN tags t ON t.id = pt.tag_id
+      WHERE pt.project_id IN (${projectIds.map(() => '?').join(',')})
+      ORDER BY t.name
+    `;
+
+    db.all(tagsSql, projectIds, (tagErr, tagRows: any[]) => {
+      if (tagErr) {
+        console.error('Error fetching project tags:', tagErr);
+        return res.json(rows.map((row) => ({ ...row, tags: [] })));
+      }
+
+      const tagsByProject = new Map<number, any[]>();
+      tagRows.forEach((tagRow) => {
+        const list = tagsByProject.get(tagRow.project_id) ?? [];
+        list.push({ id: tagRow.id, name: tagRow.name, color: tagRow.color });
+        tagsByProject.set(tagRow.project_id, list);
+      });
+
+      const result = rows.map((row) => ({
+        ...row,
+        tags: tagsByProject.get(row.id) ?? [],
+      }));
+      res.json(result);
+    });
   });
 });
 
@@ -1189,7 +1233,27 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
       });
       
       Promise.all(stagePromises).then((parsedStages) => {
-        res.json({ ...project, stages: parsedStages });
+        // Obtener etiquetas a nivel de proyecto
+        const projectTagsSql = `
+          SELECT t.id, t.name, t.color
+          FROM tags t
+          INNER JOIN project_tags pt ON t.id = pt.tag_id
+          WHERE pt.project_id = ?
+          ORDER BY t.name
+        `;
+
+        db.all(projectTagsSql, [id], (projTagErr, projectTags: any[]) => {
+          if (projTagErr) {
+            console.error('Error fetching project tags:', projTagErr);
+            projectTags = [];
+          }
+
+          res.json({
+            ...project,
+            stages: parsedStages,
+            tags: projectTags || [],
+          });
+        });
       });
     });
   });
@@ -2280,6 +2344,85 @@ apiRouter.delete('/stages/:stageId/tags/:tagId', (req: Request, res: Response) =
   });
 });
 
+// Añadir etiqueta a un proyecto
+apiRouter.post('/projects/:id/tags', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { tag_id } = req.body;
+  const organizationId = req.user!.organizationId;
+
+  if (!tag_id) {
+    return res.status(400).json({ error: 'tag_id es requerido' });
+  }
+
+  // Verificar que el proyecto pertenece a la organización del usuario
+  db.get('SELECT id FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (projErr, project: any) => {
+    if (projErr) {
+      return res.status(500).json({ error: projErr.message });
+    }
+    if (!project) {
+      return res.status(404).json({ error: 'Proyecto no encontrado o no pertenece a tu organización' });
+    }
+
+    // Verificar que el tag pertenece a la organización del usuario
+    db.get('SELECT id FROM tags WHERE id = ? AND organization_id = ?', [tag_id, organizationId], (tagErr, tag: any) => {
+      if (tagErr) {
+        return res.status(500).json({ error: tagErr.message });
+      }
+      if (!tag) {
+        return res.status(404).json({ error: 'Etiqueta no encontrada o no pertenece a tu organización' });
+      }
+
+      const sql = 'INSERT INTO project_tags (project_id, tag_id) VALUES (?, ?)';
+      db.run(sql, [id, tag_id], function (runErr) {
+        if (runErr) {
+          if (runErr.message.includes('UNIQUE constraint failed')) {
+            return res.status(400).json({ error: 'Esta etiqueta ya está asignada al proyecto' });
+          }
+          return res.status(500).json({ error: runErr.message });
+        }
+        res.status(201).json({ message: 'Etiqueta añadida al proyecto exitosamente' });
+      });
+    });
+  });
+});
+
+// Remover etiqueta de un proyecto
+apiRouter.delete('/projects/:id/tags/:tagId', (req: Request, res: Response) => {
+  const { id, tagId } = req.params;
+  const organizationId = req.user!.organizationId;
+
+  // Verificar que el proyecto pertenece a la organización del usuario
+  db.get('SELECT id FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (projErr, project: any) => {
+    if (projErr) {
+      return res.status(500).json({ error: projErr.message });
+    }
+    if (!project) {
+      return res.status(404).json({ error: 'Proyecto no encontrado o no pertenece a tu organización' });
+    }
+
+    // Verificar que la etiqueta pertenece a la organización del usuario
+    db.get('SELECT id FROM tags WHERE id = ? AND organization_id = ?', [tagId, organizationId], (tagErr, tag: any) => {
+      if (tagErr) {
+        return res.status(500).json({ error: tagErr.message });
+      }
+      if (!tag) {
+        return res.status(404).json({ error: 'Etiqueta no encontrada o no pertenece a tu organización' });
+      }
+
+      const sql = 'DELETE FROM project_tags WHERE project_id = ? AND tag_id = ?';
+      db.run(sql, [id, tagId], function (runErr) {
+        if (runErr) {
+          return res.status(500).json({ error: runErr.message });
+        }
+        if (this.changes === 0) {
+          return res.status(404).json({ error: 'Relación no encontrada' });
+        }
+        res.json({ message: 'Etiqueta removida del proyecto exitosamente' });
+      });
+    });
+  });
+});
+
 // ==================== TAGS ENDPOINTS ====================
 
 // Crear una nueva etiqueta
@@ -2314,11 +2457,13 @@ apiRouter.get('/tags', (req: Request, res: Response) => {
   const organizationId = req.user!.organizationId;
   
   const sql = `
-    SELECT 
+    SELECT
       t.*,
-      COUNT(DISTINCT st.stage_id) as usage_count
+      COUNT(DISTINCT st.stage_id) as usage_count,
+      COUNT(DISTINCT pt.project_id) as project_usage_count
     FROM tags t
     LEFT JOIN stage_tags st ON t.id = st.tag_id
+    LEFT JOIN project_tags pt ON t.id = pt.tag_id
     WHERE t.organization_id = ?
     GROUP BY t.id
     ORDER BY t.name

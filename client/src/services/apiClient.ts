@@ -42,6 +42,7 @@ export interface Project {
   total_stages?: number;
   completed_stages?: number;
   current_stage?: string;
+  tags?: Tag[];
 }
 
 export interface Stage {
@@ -133,6 +134,7 @@ export interface Tag {
   color?: string;
   created_at: string;
   usage_count?: number;
+  project_usage_count?: number;
 }
 
 export interface Comment {
@@ -225,6 +227,10 @@ export interface CreateCommentRequest {
 }
 
 export interface AddTagToStageRequest {
+  tag_id: number;
+}
+
+export interface AddTagToProjectRequest {
   tag_id: number;
 }
 
@@ -535,6 +541,16 @@ class ApiClient {
 
   async removeTagFromStage(stageId: number, tagId: number): Promise<{ message: string }> {
     const { data } = await this.api.delete(`/stages/${stageId}/tags/${tagId}`);
+    return data;
+  }
+
+  async addTagToProject(projectId: number, requestData: AddTagToProjectRequest): Promise<{ message: string }> {
+    const { data } = await this.api.post(`/projects/${projectId}/tags`, requestData);
+    return data;
+  }
+
+  async removeTagFromProject(projectId: number, tagId: number): Promise<{ message: string }> {
+    const { data } = await this.api.delete(`/projects/${projectId}/tags/${tagId}`);
     return data;
   }
 
