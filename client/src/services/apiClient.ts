@@ -11,8 +11,7 @@ export interface User {
 export interface Client {
   id: number;
   name: string;
-  email?: string;
-  phone?: string;
+  preferences?: string;
   created_at: string;
 }
 
@@ -633,12 +632,12 @@ class ApiClient {
     return data;
   }
 
-  async createClient(requestData: { name: string; email?: string; phone?: string }): Promise<Client & { message: string }> {
+  async createClient(requestData: { name: string; preferences?: string }): Promise<Client & { message: string }> {
     const { data } = await this.api.post(`/clients`, requestData);
     return data;
   }
 
-  async updateClient(id: number, requestData: { name?: string; email?: string; phone?: string }): Promise<Client> {
+  async updateClient(id: number, requestData: { name?: string; preferences?: string }): Promise<Client> {
     const { data } = await this.api.put(`/clients/${id}`, requestData);
     return data;
   }

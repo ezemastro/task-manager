@@ -37,8 +37,7 @@ export default function ClientsManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editPhone, setEditPhone] = useState('');
+  const [editPreferences, setEditPreferences] = useState('');
 
   const fetchClients = async () => {
     try {
@@ -63,8 +62,7 @@ export default function ClientsManagement() {
   const handleEdit = (client: Client) => {
     setSelectedClient(client);
     setEditName(client.name);
-    setEditEmail(client.email || '');
-    setEditPhone(client.phone || '');
+    setEditPreferences(client.preferences || '');
     setEditModalOpen(true);
   };
 
@@ -74,8 +72,7 @@ export default function ClientsManagement() {
     try {
       await apiClient.updateClient(selectedClient.id, {
         name: editName,
-        email: editEmail || undefined,
-        phone: editPhone || undefined,
+        preferences: editPreferences || undefined,
       });
       setEditModalOpen(false);
       fetchClients();
@@ -129,21 +126,20 @@ export default function ClientsManagement() {
           <TableHead>
             <TableRow>
               <TableCell><strong>Nombre</strong></TableCell>
-              <TableCell><strong>Email</strong></TableCell>
-              <TableCell><strong>Teléfono</strong></TableCell>
+              <TableCell><strong>Preferencias</strong></TableCell>
               <TableCell align="right"><strong>Acciones</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} align="center">
+                <TableCell colSpan={3} align="center">
                   Cargando...
                 </TableCell>
               </TableRow>
             ) : clients.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center">
+                <TableCell colSpan={3} align="center">
                   No hay clientes registrados
                 </TableCell>
               </TableRow>
@@ -151,8 +147,7 @@ export default function ClientsManagement() {
               clients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell>{client.name}</TableCell>
-                  <TableCell>{client.email || '-'}</TableCell>
-                  <TableCell>{client.phone || '-'}</TableCell>
+                  <TableCell>{client.preferences || '-'}</TableCell>
                   <TableCell align="right">
                     <IconButton onClick={() => handleEdit(client)} color="primary">
                       <EditIcon />
@@ -187,16 +182,11 @@ export default function ClientsManagement() {
               required
             />
             <TextField
-              label="Email"
-              type="email"
-              value={editEmail}
-              onChange={(e) => setEditEmail(e.target.value)}
-              fullWidth
-            />
-            <TextField
-              label="Teléfono"
-              value={editPhone}
-              onChange={(e) => setEditPhone(e.target.value)}
+              label="Preferencias"
+              value={editPreferences}
+              onChange={(e) => setEditPreferences(e.target.value)}
+              multiline
+              minRows={3}
               fullWidth
             />
           </Box>

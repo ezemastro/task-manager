@@ -19,8 +19,7 @@ interface CreateClientModalProps {
 
 export default function CreateClientModal({ open, onClose, onClientCreated }: CreateClientModalProps) {
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [preferences, setPreferences] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -38,13 +37,11 @@ export default function CreateClientModal({ open, onClose, onClientCreated }: Cr
     try {
       await apiClient.createClient({
         name: name.trim(),
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
+        preferences: preferences.trim() || undefined,
       });
       
       setName('');
-      setEmail('');
-      setPhone('');
+      setPreferences('');
       onClientCreated();
       onClose();
     } catch (err) {
@@ -57,7 +54,7 @@ export default function CreateClientModal({ open, onClose, onClientCreated }: Cr
   const handleClose = () => {
     if (!loading) {
       // Verificar si hay cambios sin guardar
-      const hasChanges = name.trim() !== '' || email.trim() !== '' || phone.trim() !== '';
+      const hasChanges = name.trim() !== '' || preferences.trim() !== '';
       
       if (hasChanges) {
         const confirm = window.confirm(
@@ -67,8 +64,7 @@ export default function CreateClientModal({ open, onClose, onClientCreated }: Cr
       }
       
       setName('');
-      setEmail('');
-      setPhone('');
+      setPreferences('');
       setError(null);
       onClose();
     }
@@ -95,17 +91,11 @@ export default function CreateClientModal({ open, onClose, onClientCreated }: Cr
               disabled={loading}
             />
             <TextField
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              fullWidth
-              disabled={loading}
-            />
-            <TextField
-              label="Teléfono"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              label="Preferencias"
+              value={preferences}
+              onChange={(e) => setPreferences(e.target.value)}
+              multiline
+              minRows={3}
               fullWidth
               disabled={loading}
             />

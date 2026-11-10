@@ -223,8 +223,7 @@ const setStageTagSchema: ToolSchema = {
 
 const createClientSchema: ToolSchema = {
   name: { kind: 'string', required: true, maxLength: 200 },
-  email: { kind: 'string', required: false, maxLength: 200 },
-  phone: { kind: 'string', required: false, maxLength: 50 },
+  preferences: { kind: 'string', required: false, maxLength: 500 },
 };
 
 export const writeTools: AiToolDefinition[] = [
@@ -286,7 +285,7 @@ export const writeTools: AiToolDefinition[] = [
     name: 'create_client',
     class: 'write',
     schema: createClientSchema,
-    summary: 'create_client(name:string, email?:string, phone?:string) — creates a client in your organization',
+    summary: 'create_client(name:string, preferences?:string) — creates a client in your organization',
     resourceHints: ['clients'],
   },
 ];

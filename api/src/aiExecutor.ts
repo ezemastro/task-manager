@@ -363,10 +363,10 @@ async function execListReferenceData(args: Record<string, unknown>, ctx: ToolCon
 
   if (requested.includes('clients')) {
     const rows = await dbAll(
-      'SELECT id, name, email FROM clients WHERE organization_id = ? ORDER BY name LIMIT ?',
+      'SELECT id, name FROM clients WHERE organization_id = ? ORDER BY name LIMIT ?',
       [organizationId, name ? SEARCH_SCAN_CAP : ROW_CAP]
     );
-    data.clients = capRows(name ? rows.filter((row) => nameFilter(row.name)) : rows, ['id', 'name', 'email']);
+    data.clients = capRows(name ? rows.filter((row) => nameFilter(row.name)) : rows, ['id', 'name']);
   }
   if (requested.includes('users')) {
     // Users are listed in FULL (no ROW_CAP): organizations have a handful of
@@ -802,12 +802,12 @@ async function execSetStageTag(args: Record<string, unknown>, ctx: ToolContext):
 }
 
 async function execCreateClient(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const { name, email, phone } = args;
+  const { name, preferences } = args;
   const result = await callInternal(
     'POST',
     LOOPBACK_PATHS.clients,
     ctx,
-    { name, email, phone },
+    { name, preferences },
     { toolName: 'create_client' }
   );
   if (!result.ok) return toolError(result.error);

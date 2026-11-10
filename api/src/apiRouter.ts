@@ -149,25 +149,24 @@ function initializeDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         organization_id INTEGER NOT NULL,
         name TEXT NOT NULL,
-        email TEXT,
-        phone TEXT,
+        preferences TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
       )
     `);
 
-    // Compatibilidad también para bases de desarrollo antiguas sin email/phone.
+    // Compatibilidad también para bases de desarrollo antiguas sin preferences.
     db.all('PRAGMA table_info(clients)', (err, columns: Array<{ name: string }>) => {
       if (err) {
         console.error('Error al verificar las columnas de clients:', err.message);
         return;
       }
       const existingColumns = new Set(columns.map((column) => column.name));
-      ['email', 'phone'].filter((column) => !existingColumns.has(column)).forEach((column) => {
-        db.run(`ALTER TABLE clients ADD COLUMN ${column} TEXT`, (alterErr) => {
-          if (alterErr) console.error(`Error al agregar ${column} a clients:`, alterErr.message);
+      if (!existingColumns.has('preferences')) {
+        db.run('ALTER TABLE clients ADD COLUMN preferences TEXT', (alterErr) => {
+          if (alterErr) console.error('Error al agregar preferences a clients:', alterErr.message);
         });
-      });
+      }
     });
 
     // Tabla de proyectos
@@ -639,7 +638,7 @@ apiRouter.get('/audit-logs/stats', (req: Request, res: Response) => {
 // GET all clients
 apiRouter.get('/clients', (req: Request, res: Response) => {
   const organizationId = req.user!.organizationId;
-  db.all('SELECT * FROM clients WHERE organization_id = ? ORDER BY name', [organizationId], (err, rows) => {
+  db.all('SELECT id, organization_id, name, preferences, created_at FROM clients WHERE organization_id = ? ORDER BY name', [organizationId], (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -651,7 +650,7 @@ apiRouter.get('/clients', (req: Request, res: Response) => {
 // GET single client
 apiRouter.get('/clients/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  db.get('SELECT * FROM clients WHERE id = ?', [id], (err, row) => {
+  db.get('SELECT id, organization_id, name, preferences, created_at FROM clients WHERE id = ?', [id], (err, row) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -666,7 +665,7 @@ apiRouter.get('/clients/:id', (req: Request, res: Response) => {
 
 // POST create client
 apiRouter.post('/clients', (req: Request, res: Response) => {
-  const { name, email, phone } = req.body;
+  const { name, preferences } = req.body;
   const organizationId = req.user!.organizationId;
   
   if (!name) {
@@ -675,8 +674,8 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
   }
 
   db.run(
-    'INSERT INTO clients (organization_id, name, email, phone) VALUES (?, ?, ?, ?)',
-    [organizationId, name, email || null, phone || null],
+    'INSERT INTO clients (organization_id, name, preferences) VALUES (?, ?, ?)',
+    [organizationId, name, preferences || null],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -691,11 +690,11 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
         action: 'CREATE',
         entityType: 'client',
         entityId: clientId,
-        details: JSON.stringify({ name, email, phone }),
+        details: JSON.stringify({ name, preferences }),
         ipAddress: req.ip
       });
       
-      res.status(201).json({ id: clientId, name, email, phone });
+      res.status(201).json({ id: clientId, name, preferences });
     }
   );
 });
@@ -703,12 +702,12 @@ apiRouter.post('/clients', (req: Request, res: Response) => {
 // PUT update client
 apiRouter.put('/clients/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, email, phone } = req.body;
+  const { name, preferences } = req.body;
   const organizationId = req.user!.organizationId;
 
   db.run(
-    'UPDATE clients SET name = ?, email = ?, phone = ? WHERE id = ?',
-    [name, email, phone, id],
+    'UPDATE clients SET name = ?, preferences = ? WHERE id = ?',
+    [name, preferences, id],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -725,11 +724,11 @@ apiRouter.put('/clients/:id', (req: Request, res: Response) => {
         action: 'UPDATE',
         entityType: 'client',
         entityId: Number(id),
-        details: JSON.stringify({ name, email, phone }),
+        details: JSON.stringify({ name, preferences }),
         ipAddress: req.ip
       });
       
-      res.json({ id, name, email, phone });
+      res.json({ id, name, preferences });
     }
   );
 });
