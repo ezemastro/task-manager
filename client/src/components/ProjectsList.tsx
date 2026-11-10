@@ -118,7 +118,7 @@ export default function ProjectsList() {
         apiClient.getProjects({status: "active"}),
         apiClient.getClients(),
         apiClient.getUsers(),
-        apiClient.getTags(),
+        apiClient.getProjectTagOptions(),
       ]);
       
       setClients(clientsList);

@@ -111,3 +111,6 @@ User confirmed that project tags must be a separate catalog from stage tags.
   `db.get` externo corría antes de crear `project_tag_options`. Repetida la prueba sobre una
   copia de la DB de producción con una fila legacy: se copiaron nombre/color y la asignación,
   y se eliminó `project_tags`. Builds api y client OK; verificación independiente PASS.
+- 2026-11-10 (filtro de Mis Proyectos): el selector de etiquetas estaba cargando el catálogo
+  de etapas (`getTags`). Se cambió a `getProjectTagOptions` para que el filtro use solo las
+  etiquetas de proyecto. Build del cliente OK; pendiente de commit/deploy.
