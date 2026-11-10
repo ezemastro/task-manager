@@ -11,7 +11,8 @@ characteristics of the work (e.g. "techos", "piscina", "reforma"). Users need a 
 tag a project from the list or detail and then filter the list by tag.
 
 ## Scope
-- New `project_tags` many-to-many table reusing the existing organization-scoped `tags` table.
+- New project tag catalog `project_tag_options` (organization-scoped name/color) and
+  many-to-many `project_tag_assignments`, separate from the stage `tags` catalog.
 - API: assign/remove a tag on a project; return a project's tags in project list/detail.
 - UI: tag chips next to the project description on cards and detail.
 - UI: "Agregar etiqueta" icon on project cards and button on project detail.
@@ -24,7 +25,7 @@ tag a project from the list or detail and then filter the list by tag.
 - Destructive schema changes to existing tables.
 
 ## Tasks
-- [x] T1 — DB + API: `project_tags` table; `POST /projects/:id/tags`;
+- [x] T1 — DB + API: project tag catalog + assignment tables; `POST /projects/:id/tags`;
   `DELETE /projects/:id/tags/:tagId`; include `tags` in `GET /projects` and
   `GET /projects/:id`.
 - [x] T2 — Client API: `Project.tags`, `addTagToProject`, `removeTagFromProject`.
@@ -42,7 +43,8 @@ tag a project from the list or detail and then filter the list by tag.
 - Assign/remove works from both the projects list and the project detail.
 - The projects list filters by a selected tag and shows the active filter chip.
 - Tags are visible next to the description on cards and detail.
-- Deleting a tag removes it from projects and stages (existing cascade behavior).
+- Deleting a project tag removes it only from projects; deleting a stage tag removes it
+  only from stages. The two catalogs are independent.
 - Existing projects/stages/API behavior is unchanged when no tags are used.
 
 ## Verification
