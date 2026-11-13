@@ -382,7 +382,7 @@ export default function NavigationBar() {
 
         {/* Menú desktop */}
         {!isMobile && (
-          <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
+          <Box sx={{ flexGrow: 1, display: 'flex', gap: 1, minWidth: 0 }}>
             {menuItems.map((item) => (
               <Button
                 key={item.path}
@@ -391,12 +391,36 @@ export default function NavigationBar() {
                 color="inherit"
                 startIcon={item.icon}
                 variant={isActive(item.path) ? 'outlined' : 'text'}
-                sx={{ 
+                sx={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  px: 0.5,
+                  py: 0.75,
                   borderColor: 'white',
-                  '&:hover': { borderColor: 'white' }
+                  '&:hover': { borderColor: 'white' },
+                  '& .MuiButton-startIcon': {
+                    mr: 0.5,
+                    ml: 0,
+                    flexShrink: 0,
+                    '& > *': { fontSize: '1.05rem' },
+                  },
                 }}
               >
-                {item.label}
+                <Box
+                  component="span"
+                  sx={{
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                    textAlign: 'center',
+                    lineHeight: 1.15,
+                    fontSize: { md: '0.7rem', lg: '0.75rem', xl: '0.82rem' },
+                    whiteSpace: 'normal',
+                    overflowWrap: 'break-word',
+                    hyphens: 'auto',
+                  }}
+                >
+                  {item.label}
+                </Box>
               </Button>
             ))}
           </Box>
