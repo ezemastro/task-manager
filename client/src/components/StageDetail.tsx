@@ -40,6 +40,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import { apiClient, type StageDetail, type StageCycle, type Tag, type CreateCommentRequest, type User } from '../services/apiClient';
+import StageCompletionFollowUps, { isDeliveryReviewStage, type CompletionStageInfo } from './StageCompletionFollowUps';
 import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
 import { useScrollRestoration } from '../utils/useScrollRestoration';
@@ -67,6 +68,7 @@ export default function StageDetail() {
   const [cycleLoading, setCycleLoading] = useState(false);
   const [cyclesLoaded, setCyclesLoaded] = useState(false);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
+  const [completionFollowUp, setCompletionFollowUp] = useState<CompletionStageInfo | null>(null);
   const openCycle = cycles.find((cycle) => !cycle.ended_at);
   const isInProgress = (Boolean(stage?.start_date) || Boolean(openCycle)) && !stage?.is_completed;
 
@@ -198,6 +200,15 @@ export default function StageDetail() {
     setLifecycleLoading(true);
     try {
       await apiClient.completeStage(Number(id));
+      if (stage && isDeliveryReviewStage(stage)) {
+        setCompletionFollowUp({
+          name: stage.name,
+          order_number: stage.order_number,
+          project_id: stage.project_id,
+          project_name: stage.project_name,
+          client_id: stage.client_id,
+        });
+      }
       await fetchStageDetail();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al completar etapa';
@@ -1354,6 +1365,13 @@ export default function StageDetail() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {completionFollowUp && (
+        <StageCompletionFollowUps
+          stage={completionFollowUp}
+          onClose={() => setCompletionFollowUp(null)}
+        />
+      )}
     </Container>
   );
 }

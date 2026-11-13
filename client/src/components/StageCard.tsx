@@ -20,6 +20,7 @@ import CommentIcon from '@mui/icons-material/Comment';
 import type { Stage, StageCycle } from '../services/apiClient';
 import { apiClient } from '../services/apiClient';
 import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
+import StageCompletionFollowUps, { isDeliveryReviewStage } from './StageCompletionFollowUps';
 
 interface StageCardProps {
   stage: Stage;
@@ -36,6 +37,7 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
   const [cycleLoading, setCycleLoading] = useState(false);
   const [cyclesLoaded, setCyclesLoaded] = useState(false);
   const [stageStartConfirmed, setStageStartConfirmed] = useState(Boolean(stage.start_date));
+  const [completionFollowUp, setCompletionFollowUp] = useState<Stage | null>(null);
 
   const fetchCycles = useCallback(async () => {
     let loaded = false;
@@ -89,6 +91,7 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
       await apiClient.completeStage(stage.id);
       await fetchCycles();
       if (onCompleted) onCompleted();
+      if (isDeliveryReviewStage(stage)) setCompletionFollowUp(stage);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al completar la etapa';
       setError(message);
@@ -408,6 +411,13 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
             )}
           </Button>
         ) : null}
+
+        {completionFollowUp && (
+          <StageCompletionFollowUps
+            stage={completionFollowUp}
+            onClose={() => setCompletionFollowUp(null)}
+          />
+        )}
       </CardContent>
     </Card>
   );

@@ -1225,10 +1225,14 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
     const stagesSql = `
       SELECT 
         s.*,
+        p.client_id,
+        c.name as client_name,
         u.name as responsible_name,
         u.account_email as responsible_email,
         u.role as responsible_role
       FROM stages s
+      INNER JOIN projects p ON s.project_id = p.id
+      LEFT JOIN clients c ON p.client_id = c.id
       LEFT JOIN users u ON s.responsible_id = u.id
       WHERE s.project_id = ?
       ORDER BY s.order_number

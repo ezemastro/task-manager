@@ -16,7 +16,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   Alert,
 } from '@mui/material';
 import {
@@ -26,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { apiClient, type Client } from '../services/apiClient';
 import CreateClientModal from './CreateClientModal';
+import EditClientModal from './EditClientModal';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
 
 export default function ClientsManagement() {
@@ -36,8 +36,6 @@ export default function ClientsManagement() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editPreferences, setEditPreferences] = useState('');
 
   const fetchClients = async () => {
     try {
@@ -61,24 +59,7 @@ export default function ClientsManagement() {
 
   const handleEdit = (client: Client) => {
     setSelectedClient(client);
-    setEditName(client.name);
-    setEditPreferences(client.preferences || '');
     setEditModalOpen(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!selectedClient) return;
-
-    try {
-      await apiClient.updateClient(selectedClient.id, {
-        name: editName,
-        preferences: editPreferences || undefined,
-      });
-      setEditModalOpen(false);
-      fetchClients();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar el cliente');
-    }
   };
 
   const handleDelete = (client: Client) => {
@@ -170,34 +151,12 @@ export default function ClientsManagement() {
       />
 
       {/* Edit Dialog */}
-      <Dialog open={editModalOpen} onClose={() => setEditModalOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Editar Cliente</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <TextField
-              label="Nombre"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Preferencias"
-              value={editPreferences}
-              onChange={(e) => setEditPreferences(e.target.value)}
-              multiline
-              minRows={3}
-              fullWidth
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditModalOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSaveEdit} variant="contained">
-            Guardar
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <EditClientModal
+        open={editModalOpen}
+        client={selectedClient}
+        onClose={() => setEditModalOpen(false)}
+        onSaved={fetchClients}
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
