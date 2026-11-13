@@ -9,6 +9,7 @@ import {
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { Stage } from '../services/apiClient';
 import DeadlineChip from './DeadlineChip';
+import { formatLocalDateTime } from '../utils/dateUtils';
 
 interface StageInProgressCardProps {
   stage: Stage;
@@ -126,16 +127,11 @@ export default function StageInProgressCard({
               {stage.recent_comments.slice(0, 3).map((comment, idx) => (
                 <Box key={comment.id || idx}>
                   <Typography variant="caption" display="block" sx={{ lineHeight: 1.4 }}>
-                    <strong style={{ color: '#666' }}>{comment.author}:</strong>{' '}
-                    <span style={{ color: '#333' }}>{comment.content}</span>
+                    <strong style={{ color: '#666' }}>{comment.author}</strong>
+                    <span style={{ color: '#888' }}> · {formatLocalDateTime(comment.created_at)}</span>
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                    {new Date(comment.created_at).toLocaleDateString('es-ES', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                  <Typography variant="caption" display="block" sx={{ color: '#333' }}>
+                    {comment.content}
                   </Typography>
                 </Box>
               ))}
@@ -234,15 +230,11 @@ export default function StageInProgressCard({
             Último comentario:
           </Typography>
           <Typography variant="caption" display="block" sx={{ mt: 0.3 }}>
-            <strong>{stage.recent_comments[0].author}:</strong> {stage.recent_comments[0].content}
+            <strong>{stage.recent_comments[0].author}</strong>
+            <span style={{ color: '#888' }}> · {formatLocalDateTime(stage.recent_comments[0].created_at)}</span>
           </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {new Date(stage.recent_comments[0].created_at).toLocaleDateString('es-ES', {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+          <Typography variant="caption" display="block" sx={{ color: '#333', mt: 0.3 }}>
+            {stage.recent_comments[0].content}
           </Typography>
         </Box>
       )}

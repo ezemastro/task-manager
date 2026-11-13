@@ -281,12 +281,7 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
                           {comment.author}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" noWrap>
-                          {new Date(comment.created_at).toLocaleDateString('es-ES', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {formatLocalDateTime(comment.created_at)}
                         </Typography>
                       </Stack>
                       <Typography 

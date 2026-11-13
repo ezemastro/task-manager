@@ -30,6 +30,7 @@ import { apiClient, type Stage, type User, type Client } from '../services/apiCl
 import DeadlineChip from './DeadlineChip';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
 import { useScrollRestoration } from '../utils/useScrollRestoration';
+import { formatLocalDateTime } from '../utils/dateUtils';
 
 type SortOption = 'project' | 'stage' | 'responsible' | 'deadline' | 'intermediate_date';
 
@@ -608,6 +609,9 @@ export default function AllStagesView() {
                               }}
                             >
                               💬 {recentComment.author}:
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                              {formatLocalDateTime(recentComment.created_at)}
                             </Typography>
                             <Typography 
                               variant="caption" 
