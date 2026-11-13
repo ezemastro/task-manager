@@ -22,6 +22,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
 import { apiClient, type Project, type Stage, type Client, type Tag } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
+import ProjectTagsDialog from './ProjectTagsDialog';
 
 interface ProjectWithStages extends Project {
   stages: Stage[];
@@ -36,6 +37,7 @@ export default function CompletedProjectsView() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [tagDialogProject, setTagDialogProject] = useState<ProjectWithStages | null>(null);
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,8 +46,8 @@ export default function CompletedProjectsView() {
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [showFilters, setShowFilters] = useState(false);
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchProjects = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
 
     try {
@@ -70,11 +72,18 @@ export default function CompletedProjectsView() {
       );
 
       setProjects(projectsWithStages);
+      if (silent) {
+        // Mantener el diálogo montado y sincronizado con los datos nuevos.
+        setTagDialogProject((current) => {
+          if (!current) return null;
+          return projectsWithStages.find((p) => p.id === current.id) ?? null;
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al cargar los proyectos';
       setError(message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -309,10 +318,20 @@ export default function CompletedProjectsView() {
               stages={project.stages || []}
               tags={project.tags}
               onStageCompleted={fetchProjects}
+              onEditTags={() => setTagDialogProject(project)}
             />
           ))}
         </Box>
       )}
+
+      <ProjectTagsDialog
+        open={tagDialogProject !== null}
+        projectId={tagDialogProject?.id ?? 0}
+        projectName={tagDialogProject?.name ?? ''}
+        assignedTags={tagDialogProject?.tags ?? []}
+        onClose={() => setTagDialogProject(null)}
+        onChanged={() => fetchProjects(true)}
+      />
     </Container>
   );
 }
