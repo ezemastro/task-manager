@@ -20,7 +20,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
-import { apiClient, type Project, type Stage, type Client } from '../services/apiClient';
+import { apiClient, type Project, type Stage, type Client, type Tag } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
 
 interface ProjectWithStages extends Project {
@@ -33,12 +33,14 @@ export default function CompletedProjectsView() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectWithStages[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState<string>('');
+  const [selectedTag, setSelectedTag] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -47,12 +49,14 @@ export default function CompletedProjectsView() {
     setError('');
 
     try {
-      const [projectsList, clientsList] = await Promise.all([
+      const [projectsList, clientsList, tagsList] = await Promise.all([
         apiClient.getProjects({status: "completed"}),
         apiClient.getClients(),
+        apiClient.getProjectTagOptions(),
       ]);
       
       setClients(clientsList);
+      setTags(tagsList);
       
       // Filtrar solo proyectos completados
       const completedProjects = projectsList.filter(p => p.status === 'completed');
@@ -98,6 +102,11 @@ export default function CompletedProjectsView() {
       filtered = filtered.filter((p) => p.client_id?.toString() === selectedClient);
     }
 
+    // Filtro por etiqueta
+    if (selectedTag) {
+      filtered = filtered.filter((p) => p.tags?.some((tag) => tag.id.toString() === selectedTag));
+    }
+
     // Ordenar
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -116,7 +125,7 @@ export default function CompletedProjectsView() {
     });
 
     return filtered;
-  }, [projects, searchTerm, selectedClient, sortBy]);
+  }, [projects, searchTerm, selectedClient, selectedTag, sortBy]);
 
   if (loading) {
     return (
@@ -195,6 +204,22 @@ export default function CompletedProjectsView() {
             </FormControl>
 
             <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel>Etiqueta</InputLabel>
+              <Select
+                value={selectedTag}
+                label="Etiqueta"
+                onChange={(e) => setSelectedTag(e.target.value)}
+              >
+                <MenuItem value="">Todas</MenuItem>
+                {tags.map((tag) => (
+                  <MenuItem key={tag.id} value={tag.id.toString()}>
+                    {tag.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ minWidth: 200 }}>
               <InputLabel>Ordenar por</InputLabel>
               <Select
                 value={sortBy}
@@ -211,7 +236,7 @@ export default function CompletedProjectsView() {
       </Paper>
 
       {/* Filtros activos */}
-      {(searchTerm || selectedClient) && (
+      {(searchTerm || selectedClient || selectedTag) && (
         <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
           {searchTerm && (
             <Chip
@@ -227,12 +252,20 @@ export default function CompletedProjectsView() {
               size="small"
             />
           )}
-          {(searchTerm || selectedClient) && (
+          {selectedTag && (
+            <Chip
+              label={`Etiqueta: ${tags.find(t => t.id.toString() === selectedTag)?.name ?? selectedTag}`}
+              onDelete={() => setSelectedTag('')}
+              size="small"
+            />
+          )}
+          {(searchTerm || selectedClient || selectedTag) && (
             <Chip
               label="Limpiar filtros"
               onClick={() => {
                 setSearchTerm('');
                 setSelectedClient('');
+                setSelectedTag('');
               }}
               color="primary"
               size="small"
@@ -274,6 +307,7 @@ export default function CompletedProjectsView() {
               responsibleName={project.responsible_name}
               deadline={project.deadline}
               stages={project.stages || []}
+              tags={project.tags}
               onStageCompleted={fetchProjects}
             />
           ))}
