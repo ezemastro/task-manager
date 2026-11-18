@@ -2052,7 +2052,13 @@ apiRouter.get('/stages/:id', (req: Request, res: Response) => {
       }
 
       // Obtener comentarios
-      const commentsSql = 'SELECT * FROM comments WHERE stage_id = ? ORDER BY created_at DESC';
+      const commentsSql = `
+        SELECT c.*, COALESCE(u.name, 'Usuario') as author
+        FROM comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.stage_id = ?
+        ORDER BY c.created_at DESC
+      `;
       db.all(commentsSql, [id], (err, comments) => {
         if (err) {
           return res.status(500).json({ error: err.message });
