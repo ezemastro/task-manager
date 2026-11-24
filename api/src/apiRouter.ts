@@ -40,7 +40,7 @@ function isProjectType(value: unknown): value is ProjectType {
 // "obra nueva" y se copian a los demás tipos, para que cada tipo arranque con
 // la misma lista y se pueda organizar por separado. Es idempotente: una vez
 // asignado el tipo, no quedan plantillas en NULL para volver a copiar.
-function ensureProjectTypeColumns() {
+function ensureProjectTypeColumns(onDone: () => void = () => {}) {
   const addColumnIfMissing = (table: string, done: () => void) => {
     db.all(`PRAGMA table_info(${table})`, (err, columns: Array<{ name: string }>) => {
       if (err) {
@@ -75,11 +75,116 @@ function ensureProjectTypeColumns() {
       (execErr) => {
         if (execErr) {
           console.error('Error al asignar tipo a las etapas predefinidas:', execErr.message);
-          db.exec('ROLLBACK', () => {});
+          db.exec('ROLLBACK', () => onDone());
+          return;
         }
+        onDone();
       }
     );
   });
+}
+
+// ==================== ATRIBUTOS DE ETAPA ====================
+// Se configuran una vez por empresa en las etapas predefinidas y se copian a
+// cada etapa de proyecto al crearlo:
+// - stage_kind: 'execution' (tarea) o 'control'.
+// - milestone: función especial de la etapa ('delivery' marca la entrega real,
+//   'client_closing' el cierre administrativo del cliente). Reemplaza buscar
+//   las etapas por nombre, así renombrarlas no rompe los controles.
+// - is_required: no se puede borrar de un proyecto.
+// - counts_work_time: suma al total de días de trabajo del resumen.
+export const STAGE_KINDS = ['execution', 'control'] as const;
+export const STAGE_MILESTONES = ['delivery', 'client_closing'] as const;
+type StageMilestone = typeof STAGE_MILESTONES[number];
+
+// Nombres con los que se identificaban estas etapas antes de los atributos;
+// solo se usan una vez, para marcar las etapas existentes.
+const LEGACY_MILESTONE_STAGE_NAMES: Record<StageMilestone, string> = {
+  delivery: 'entrega completa y revisada',
+  client_closing: 'cierre por parte de cliente',
+};
+
+const STAGE_ATTRIBUTE_COLUMNS = [
+  ['stage_kind', "TEXT NOT NULL DEFAULT 'execution'"],
+  ['milestone', 'TEXT'],
+  ['is_required', 'INTEGER NOT NULL DEFAULT 0'],
+  ['counts_work_time', 'INTEGER NOT NULL DEFAULT 1'],
+] as const;
+
+function ensureStageAttributeColumns() {
+  ['stage_templates', 'stages'].forEach((table) => {
+    db.all(`PRAGMA table_info(${table})`, (err, columns: Array<{ name: string }>) => {
+      if (err) {
+        console.error(`Error al verificar atributos de etapa en ${table}:`, err.message);
+        return;
+      }
+      const missing = STAGE_ATTRIBUTE_COLUMNS.filter(([name]) => !columns.some((column) => column.name === name));
+      if (missing.length === 0) return;
+      const needsBackfill = missing.some(([name]) => name === 'milestone');
+      let pending = missing.length;
+      missing.forEach(([name, type]) => {
+        db.run(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`, (alterErr) => {
+          if (alterErr) console.error(`Error al agregar ${name} a ${table}:`, alterErr.message);
+          pending -= 1;
+          if (pending === 0 && needsBackfill) backfillLegacyMilestones(table);
+        });
+      });
+    });
+  });
+}
+
+// Marca una única vez (al crear la columna) las etapas que antes se
+// reconocían por nombre. El cierre del cliente queda como etapa de control
+// que no suma tiempo de trabajo (es espera del cliente).
+function backfillLegacyMilestones(table: string) {
+  db.all(`SELECT id, name FROM ${table}`, (err, rows: Array<{ id: number; name: string }>) => {
+    if (err) {
+      console.error(`Error al marcar funciones de etapa en ${table}:`, err.message);
+      return;
+    }
+    const idsFor = (milestone: StageMilestone) => rows
+      .filter((row) => normalizeStageName(row.name) === LEGACY_MILESTONE_STAGE_NAMES[milestone])
+      .map((row) => row.id);
+    const update = (ids: number[], setSql: string, params: unknown[]) => {
+      if (ids.length === 0) return;
+      db.run(`UPDATE ${table} SET ${setSql} WHERE id IN (${ids.map(() => '?').join(',')})`, [...params, ...ids], (updateErr) => {
+        if (updateErr) console.error(`Error al marcar funciones de etapa en ${table}:`, updateErr.message);
+      });
+    };
+    update(idsFor('delivery'), 'milestone = ?', ['delivery']);
+    update(idsFor('client_closing'), "milestone = ?, stage_kind = 'control', counts_work_time = 0", ['client_closing']);
+  });
+}
+
+// Normaliza los atributos recibidos en el body; devuelve un error legible si
+// alguno es inválido. Solo incluye los campos presentes.
+function parseStageAttributes(body: Record<string, unknown>): { values: Record<string, unknown>; error?: string } {
+  const values: Record<string, unknown> = {};
+  if (body.stage_kind !== undefined) {
+    if (!(STAGE_KINDS as readonly unknown[]).includes(body.stage_kind)) return { values, error: 'Tipo de etapa inválido (execution o control)' };
+    values.stage_kind = body.stage_kind;
+  }
+  if (body.milestone !== undefined) {
+    if (body.milestone !== null && body.milestone !== '' && !(STAGE_MILESTONES as readonly unknown[]).includes(body.milestone)) {
+      return { values, error: 'Función de etapa inválida (delivery o client_closing)' };
+    }
+    values.milestone = body.milestone || null;
+  }
+  if (body.is_required !== undefined) values.is_required = body.is_required ? 1 : 0;
+  if (body.counts_work_time !== undefined) values.counts_work_time = body.counts_work_time ? 1 : 0;
+  return { values };
+}
+
+// Una función (entrega / cierre) la tiene una sola etapa por tipo de proyecto:
+// al asignarla a una, se quita de las demás.
+function clearMilestoneFromOtherTemplates(templateId: number, done: (err: Error | null) => void) {
+  db.run(
+    `UPDATE stage_templates SET milestone = NULL
+     WHERE id != ? AND milestone IS NOT NULL
+       AND (organization_id, project_type, milestone) = (SELECT organization_id, project_type, milestone FROM stage_templates WHERE id = ?)`,
+    [templateId, templateId],
+    (err) => done(err),
+  );
 }
 
 // Email del super administrador global (dueño de la plataforma).
@@ -281,7 +386,9 @@ function initializeDatabase() {
     `);
 
     // Tipo de proyecto (obra nueva / carteles / reforma) en proyectos y plantillas.
-    ensureProjectTypeColumns();
+    // Después (cuando ya existen las copias por tipo) se agregan los atributos
+    // de etapa: tipo, función, obligatoria y si suma tiempo de trabajo.
+    ensureProjectTypeColumns(() => ensureStageAttributeColumns());
 
     // Tabla de etapas
     db.run(`
@@ -594,6 +701,85 @@ function cycleComparison(endedAt: string, deadline: string | null) {
     : { status: 'late', days_early: 0, days_late: Math.abs(difference) };
 }
 
+// ==================== FECHAS DE ENTREGA Y RETRASO ====================
+// El retraso se mide entre la fecha comprometida (projects.deadline) y la
+// entrega real (cuando se completa la etapa "Entrega completa y revisada").
+// El cierre administrativo ("Cierre por parte de cliente") se informa pero no
+// cuenta para el retraso, porque depende del cliente.
+// Las etapas se identifican por su función (stages.milestone), no por nombre.
+
+function normalizeStageName(name: string | null | undefined): string {
+  return (name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+interface DeliveryStageRow {
+  milestone: string | null;
+  is_completed: number | boolean | null;
+  completed_date: string | null;
+}
+
+type DeliveryStatus = 'on_time' | 'late' | 'pending' | 'overdue' | 'no_commitment';
+
+export interface DeliveryInfo {
+  committed_date: string | null;
+  delivered_date: string | null;
+  closed_date: string | null;
+  status: DeliveryStatus;
+  delay_days: number;
+}
+
+function completedStageDate(stages: DeliveryStageRow[], milestone: StageMilestone): string | null {
+  const dates = stages
+    .filter((stage) => stage.milestone === milestone && stage.is_completed && stage.completed_date)
+    .map((stage) => stage.completed_date as string)
+    .sort();
+  return dates.length > 0 ? dates[dates.length - 1] : null;
+}
+
+function daysBetweenCalendarDates(from: string, to: string): number | null {
+  const fromMillis = Date.parse(`${from}T00:00:00Z`);
+  const toMillis = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(fromMillis) || !Number.isFinite(toMillis)) return null;
+  return Math.round((toMillis - fromMillis) / 86400000);
+}
+
+function computeDeliveryInfo(
+  project: { deadline: string | null; status?: string | null; completed_date?: string | null },
+  stages: DeliveryStageRow[],
+  now: Date = new Date(),
+): DeliveryInfo {
+  const deliveredAt = completedStageDate(stages, 'delivery');
+  const closedAt = completedStageDate(stages, 'client_closing')
+    ?? (project.status === 'completed' ? project.completed_date ?? null : null);
+  const committed = dateOnly(project.deadline);
+  const delivered = businessCalendarDate(deliveredAt);
+  const base = {
+    committed_date: committed,
+    delivered_date: delivered,
+    closed_date: businessCalendarDate(closedAt),
+  };
+
+  if (!committed) return { ...base, status: 'no_commitment', delay_days: 0 };
+
+  if (delivered) {
+    const delay = daysBetweenCalendarDates(committed, delivered) ?? 0;
+    return delay > 0
+      ? { ...base, status: 'late', delay_days: delay }
+      : { ...base, status: 'on_time', delay_days: 0 };
+  }
+
+  const today = businessCalendarDate(now.toISOString());
+  const overdueBy = today ? daysBetweenCalendarDates(committed, today) ?? 0 : 0;
+  return overdueBy > 0
+    ? { ...base, status: 'overdue', delay_days: overdueBy }
+    : { ...base, status: 'pending', delay_days: 0 };
+}
+
 function calendarDurationDays(startedAt: string | null | undefined, endedAt: string | null | undefined): number | null {
   const startedDate = businessCalendarDate(startedAt);
   const finishedDate = businessCalendarDate(endedAt || new Date().toISOString());
@@ -640,7 +826,9 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
           AND sc.deadline_used IS NOT NULL
           AND date(sc.ended_at, '-3 hours') > date(sc.deadline_used, '-3 hours')
         THEN 1 ELSE 0
-      END), 0) as delayed_cycles
+      END), 0) as delayed_cycles,
+      MAX(COALESCE(s.counts_work_time, 1)) as counts_work_time,
+      MAX(CASE WHEN s.stage_kind = 'control' THEN 1 ELSE 0 END) as is_control
     FROM projects p
     INNER JOIN stages s ON s.project_id = p.id
     LEFT JOIN stage_cycles sc ON sc.stage_id = s.id AND sc.project_id = p.id
@@ -656,12 +844,37 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
     ) WHERE year IS NOT NULL ORDER BY year DESC
   `;
 
+  // Entregas del año: proyectos cuya etapa de entrega se completó en `year`.
+  const deliveryStagesSql = `
+    SELECT p.id as project_id, p.deadline, p.status, p.completed_date as project_completed_date,
+           s.milestone, s.is_completed, s.completed_date
+    FROM projects p
+    INNER JOIN stages s ON s.project_id = p.id
+    WHERE p.organization_id = ?
+  `;
+
   db.get(countsSql, [String(year), String(year), organizationId], (countsError, counts: any) => {
     if (countsError) return res.status(500).json({ error: countsError.message });
     db.all(stagesSql, [organizationId, String(year)], (stagesError, stages: any[]) => {
       if (stagesError) return res.status(500).json({ error: stagesError.message });
+      db.all(deliveryStagesSql, [organizationId], (deliveryError, deliveryRows: any[]) => {
+        if (deliveryError) return res.status(500).json({ error: deliveryError.message });
       db.all(yearsSql, [organizationId, organizationId], (yearsError, years: any[]) => {
         if (yearsError) return res.status(500).json({ error: yearsError.message });
+        const byProject = new Map<number, { project: any; stages: DeliveryStageRow[] }>();
+        (deliveryRows || []).forEach((row) => {
+          const entry = byProject.get(row.project_id) ?? {
+            project: { deadline: row.deadline, status: row.status, completed_date: row.project_completed_date },
+            stages: [],
+          };
+          entry.stages.push({ milestone: row.milestone, is_completed: row.is_completed, completed_date: row.completed_date });
+          byProject.set(row.project_id, entry);
+        });
+        const deliveredThisYear = Array.from(byProject.values())
+          .map(({ project, stages: projectStages }) => computeDeliveryInfo(project, projectStages))
+          .filter((info) => info.delivered_date?.startsWith(`${year}-`));
+        const measured = deliveredThisYear.filter((info) => info.status === 'on_time' || info.status === 'late');
+        const lateDeliveries = measured.filter((info) => info.status === 'late');
         const availableYears = Array.from(new Set([
           currentYear,
           ...(years || []).map((row) => Number(row.year)).filter((value) => Number.isInteger(value)),
@@ -675,8 +888,24 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
             stage_name: stage.stage_name,
             total_days: Number(stage.total_days || 0),
             delayed_cycles: Number(stage.delayed_cycles || 0),
+            counts_work_time: Boolean(stage.counts_work_time),
+            is_control: Boolean(stage.is_control),
           })),
+          // Días de trabajo: solo las etapas que suman tiempo (excluye p. ej.
+          // la espera del cierre del cliente).
+          work_days: (stages || [])
+            .filter((stage) => stage.counts_work_time)
+            .reduce((sum, stage) => sum + Number(stage.total_days || 0), 0),
+          deliveries: {
+            delivered: deliveredThisYear.length,
+            with_commitment: measured.length,
+            late: lateDeliveries.length,
+            on_time: measured.length - lateDeliveries.length,
+            late_percentage: measured.length > 0 ? Math.round((lateDeliveries.length / measured.length) * 100) : null,
+            total_delay_days: lateDeliveries.reduce((sum, info) => sum + info.delay_days, 0),
+          },
         });
+      });
       });
     });
   });
@@ -959,21 +1188,42 @@ apiRouter.post('/stage-templates', (req: Request, res: Response) => {
     return;
   }
 
+  const attributes = parseStageAttributes(req.body);
+  if (attributes.error) {
+    res.status(400).json({ error: attributes.error });
+    return;
+  }
+  const attrs = {
+    stage_kind: 'execution',
+    milestone: null as string | null,
+    is_required: 0,
+    // Las etapas de control no suman tiempo de trabajo salvo que se indique.
+    counts_work_time: attributes.values.stage_kind === 'control' ? 0 : 1,
+    ...attributes.values,
+  };
+
   db.run(
-    'INSERT INTO stage_templates (organization_id, name, order_number, default_responsible_id, estimated_duration_days, project_type) VALUES (?, ?, ?, ?, ?, ?)',
-    [organizationId, name, order_number, default_responsible_id || null, estimated_duration_days || null, project_type],
+    'INSERT INTO stage_templates (organization_id, name, order_number, default_responsible_id, estimated_duration_days, project_type, stage_kind, milestone, is_required, counts_work_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [organizationId, name, order_number, default_responsible_id || null, estimated_duration_days || null, project_type, attrs.stage_kind, attrs.milestone, attrs.is_required, attrs.counts_work_time],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.status(201).json({
-        id: this.lastID,
+      const createdId = this.lastID;
+      const respond = () => res.status(201).json({
+        ...attrs,
+        id: createdId,
         name,
         order_number,
         default_responsible_id,
         estimated_duration_days,
         project_type,
+      });
+      if (!attrs.milestone) return respond();
+      clearMilestoneFromOtherTemplates(createdId, (clearErr) => {
+        if (clearErr) return res.status(500).json({ error: clearErr.message });
+        respond();
       });
     }
   );
@@ -1030,19 +1280,26 @@ apiRouter.put('/stage-templates/:id', (req: Request, res: Response) => {
     updates.push('estimated_duration_days = ?');
     values.push(estimated_duration_days);
   }
+  const attributes = parseStageAttributes(req.body);
+  if (attributes.error) {
+    res.status(400).json({ error: attributes.error });
+    return;
+  }
+  Object.entries(attributes.values).forEach(([column, value]) => {
+    updates.push(`${column} = ?`);
+    values.push(value);
+  });
 
   if (updates.length === 0) {
     res.status(400).json({ error: 'No hay campos para actualizar' });
     return;
   }
 
-  values.push(id);
-
-  console.log('SQL Query:', `UPDATE stage_templates SET ${updates.join(', ')} WHERE id = ?`);
-  console.log('Values:', values);
+  // Solo plantillas de la propia organización.
+  values.push(id, req.user!.organizationId);
 
   db.run(
-    `UPDATE stage_templates SET ${updates.join(', ')} WHERE id = ?`,
+    `UPDATE stage_templates SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`,
     values,
     function(err) {
       if (err) {
@@ -1053,15 +1310,19 @@ apiRouter.put('/stage-templates/:id', (req: Request, res: Response) => {
         res.status(404).json({ error: 'Plantilla de etapa no encontrada' });
         return;
       }
-      
+
       // Devolver la plantilla actualizada
-      db.get('SELECT * FROM stage_templates WHERE id = ?', [id], (err, row) => {
+      const respond = () => db.get('SELECT * FROM stage_templates WHERE id = ?', [id], (err, row) => {
         if (err) {
           res.status(500).json({ error: err.message });
           return;
         }
-        console.log('Updated template:', row);
         res.json(row);
+      });
+      if (!attributes.values.milestone) return respond();
+      clearMilestoneFromOtherTemplates(Number(id), (clearErr) => {
+        if (clearErr) return res.status(500).json({ error: clearErr.message });
+        respond();
       });
     }
   );
@@ -1144,7 +1405,7 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
       }
 
       const insertStage = db.prepare(
-        'INSERT INTO stages (project_id, template_id, name, responsible_id, order_number, estimated_end_date, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO stages (project_id, template_id, name, responsible_id, order_number, estimated_end_date, start_date, stage_kind, milestone, is_required, counts_work_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       let stageError: Error | null = null;
       let done = 0;
@@ -1173,7 +1434,11 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
           template.default_responsible_id,
           template.order_number,
           estimatedEndDate,
-          startDate
+          startDate,
+          template.stage_kind ?? 'execution',
+          template.milestone ?? null,
+          template.is_required ? 1 : 0,
+          template.counts_work_time === 0 ? 0 : 1,
         ], function (runErr) {
           if (runErr && !stageError) stageError = runErr;
           done += 1;
@@ -1395,6 +1660,7 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
             ...project,
             stages: parsedStages,
             tags: projectTags || [],
+            delivery: computeDeliveryInfo(project as any, stages),
           });
         });
       });
@@ -2422,9 +2688,12 @@ apiRouter.delete('/stages/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
   // Obtener info antes de eliminar
-  db.get('SELECT s.name, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, stageInfo: any) => {
+  db.get('SELECT s.name, s.is_required, p.organization_id, p.name as project_name FROM stages s INNER JOIN projects p ON s.project_id = p.id WHERE s.id = ?', [id], (err, stageInfo: any) => {
     if (err) {
       return res.status(500).json({ error: err.message });
+    }
+    if (stageInfo?.is_required) {
+      return res.status(400).json({ error: `La etapa "${stageInfo.name}" es obligatoria y no se puede eliminar del proyecto.` });
     }
 
     const sql = 'DELETE FROM stages WHERE id = ?';

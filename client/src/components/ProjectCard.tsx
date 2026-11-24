@@ -21,6 +21,7 @@ import DeadlineChip from './DeadlineChip';
 import { saveProjectReturnSnapshot, type ProjectReturnFilters } from '../utils/projectReturnSnapshot';
 import { getMissingProjectData } from '../utils/projectRequiredFields';
 import { getProjectTypeLabel } from '../utils/projectTypes';
+import { isDeliveryReviewStage } from './StageCompletionFollowUps';
 
 interface ProjectCardProps {
   projectId: number;
@@ -77,6 +78,9 @@ export default function ProjectCard({
   const totalStages = stages.length;
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
   const isCompleted = totalStages > 0 && completedStages === totalStages;
+  // Una vez entregado, la fecha comprometida deja de "vencer": lo que falta
+  // (cierre del cliente) no cuenta como retraso.
+  const isDelivered = stages.some((stage) => stage.is_completed && isDeliveryReviewStage(stage));
   
   // Obtener TODAS las etapas en proceso (con start_date y no completadas)
   const stagesInProgress = stages.filter(stage => stage.start_date && !stage.is_completed);
@@ -181,8 +185,8 @@ export default function ProjectCard({
               )}
               {deadline && (
                 <DeadlineChip 
-                  date={deadline} 
-                  isCompleted={isCompleted}
+                  date={deadline}
+                  isCompleted={isCompleted || isDelivered}
                   size="small"
                   showIcon={true}
                 />

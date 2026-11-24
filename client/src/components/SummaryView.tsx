@@ -4,6 +4,7 @@ import {
   Box,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Container,
   FormControl,
@@ -23,6 +24,7 @@ import {
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import { apiClient, type ProjectSummary } from '../services/apiClient';
 
 const currentYear = Number(new Intl.DateTimeFormat('en-US', {
@@ -92,7 +94,7 @@ export default function SummaryView() {
       ) : summary ? (
         <Stack spacing={3}>
           <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card sx={{ height: '100%', borderTop: 4, borderColor: 'primary.main' }}>
                 <CardContent>
                   <Stack direction="row" spacing={2} alignItems="center">
@@ -102,12 +104,32 @@ export default function SummaryView() {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <Card sx={{ height: '100%', borderTop: 4, borderColor: 'success.main' }}>
                 <CardContent>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <CheckCircleOutlineIcon color="success" />
                     <Box><Typography color="text.secondary" variant="body2">Proyectos completados en {summary.year}</Typography><Typography variant="h3" sx={{ fontWeight: 700 }}>{summary.projects_completed}</Typography></Box>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Card sx={{ height: '100%', borderTop: 4, borderColor: 'warning.main' }}>
+                <CardContent>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <ScheduleIcon color="warning" />
+                    <Box>
+                      <Typography color="text.secondary" variant="body2">Entregas con retraso en {summary.year}</Typography>
+                      <Typography variant="h3" sx={{ fontWeight: 700 }}>
+                        {summary.deliveries?.late_percentage ?? '—'}{summary.deliveries?.late_percentage != null && '%'}
+                      </Typography>
+                      <Typography color="text.secondary" variant="caption" component="p">
+                        {summary.deliveries && summary.deliveries.with_commitment > 0
+                          ? `${summary.deliveries.late} de ${summary.deliveries.with_commitment} entregas. Compara la entrega real con la fecha comprometida; no incluye el cierre del cliente.`
+                          : 'Sin entregas con fecha comprometida este año.'}
+                      </Typography>
+                    </Box>
                   </Stack>
                 </CardContent>
               </Card>
@@ -120,13 +142,28 @@ export default function SummaryView() {
                 <CalendarMonthIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>Rendimiento por etapa</Typography>
               </Stack>
+              {summary.work_days !== undefined && visibleStages.length > 0 && (
+                <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+                  Días de trabajo: <strong>{summary.work_days}</strong> (solo las etapas que suman tiempo de trabajo)
+                </Typography>
+              )}
               {visibleStages.length === 0 ? (
                 <Typography color="text.secondary">No hay etapas con actividad registrada en proyectos completados durante este año.</Typography>
               ) : (
                 <TableContainer>
                   <Table size="small">
-                    <TableHead><TableRow><TableCell>Etapa</TableCell><TableCell align="right">Días totales</TableCell><TableCell align="right">Ciclos demorados</TableCell></TableRow></TableHead>
-                    <TableBody>{visibleStages.map((stage) => <TableRow key={stage.stage_name}><TableCell sx={{ fontWeight: 600 }}>{stage.stage_name}</TableCell><TableCell align="right">{stage.total_days}</TableCell><TableCell align="right">{stage.delayed_cycles}</TableCell></TableRow>)}</TableBody>
+                    <TableHead><TableRow><TableCell>Etapa</TableCell><TableCell align="right">Días totales</TableCell><TableCell align="right">Ciclos demorados</TableCell><TableCell align="right">Suma tiempo</TableCell></TableRow></TableHead>
+                    <TableBody>{visibleStages.map((stage) => (
+                      <TableRow key={stage.stage_name} sx={stage.counts_work_time === false ? { '& td': { color: 'text.secondary' } } : undefined}>
+                        <TableCell sx={{ fontWeight: 600 }}>
+                          {stage.stage_name}
+                          {stage.is_control && <Chip label="Control" size="small" variant="outlined" sx={{ ml: 1, height: 20 }} />}
+                        </TableCell>
+                        <TableCell align="right">{stage.total_days}</TableCell>
+                        <TableCell align="right">{stage.delayed_cycles}</TableCell>
+                        <TableCell align="right">{stage.counts_work_time === false ? 'No' : 'Sí'}</TableCell>
+                      </TableRow>
+                    ))}</TableBody>
                   </Table>
                 </TableContainer>
               )}

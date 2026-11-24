@@ -1,4 +1,5 @@
 import type { ProjectType } from '../utils/projectTypes';
+import type { StageAttributes } from '../utils/stageAttributes';
 
 // ==================== TYPES & INTERFACES ====================
 
@@ -17,7 +18,7 @@ export interface Client {
   created_at: string;
 }
 
-export interface StageTemplate {
+export interface StageTemplate extends StageAttributes {
   id: number;
   name: string;
   order_number: number;
@@ -41,6 +42,8 @@ export interface Project {
   responsible_name?: string;
   deadline?: string;
   project_type?: ProjectType | null;
+  /** Solo en GET /projects/:id: fechas comprometida/entregada/cerrada y retraso. */
+  delivery?: ProjectDelivery;
   created_at: string;
   updated_at: string;
   total_stages?: number;
@@ -49,7 +52,7 @@ export interface Project {
   tags?: Tag[];
 }
 
-export interface Stage {
+export interface Stage extends StageAttributes {
   id: number;
   project_id: number;
   template_id?: number;
@@ -108,7 +111,7 @@ export interface StageCycle {
   comparison?: StageCycleComparison | null;
 }
 
-export interface StageDetail {
+export interface StageDetail extends StageAttributes {
   id: number;
   project_id: number;
   template_id?: number;
@@ -176,6 +179,8 @@ export interface ProjectSummaryStage {
   stage_name: string;
   total_days: number;
   delayed_cycles: number;
+  counts_work_time?: boolean;
+  is_control?: boolean;
 }
 
 export interface ProjectSummary {
@@ -184,6 +189,26 @@ export interface ProjectSummary {
   projects_created: number;
   projects_completed: number;
   stages: ProjectSummaryStage[];
+  /** Días totales solo de las etapas que suman tiempo de trabajo. */
+  work_days?: number;
+  deliveries?: {
+    delivered: number;
+    with_commitment: number;
+    late: number;
+    on_time: number;
+    late_percentage: number | null;
+    total_delay_days: number;
+  };
+}
+
+// Retraso medido entre la fecha comprometida y la entrega real (etapa
+// "Entrega completa y revisada"); el cierre del cliente no cuenta.
+export interface ProjectDelivery {
+  committed_date: string | null;
+  delivered_date: string | null;
+  closed_date: string | null;
+  status: 'on_time' | 'late' | 'pending' | 'overdue' | 'no_commitment';
+  delay_days: number;
 }
 
 export interface CreateStageRequest {
@@ -704,7 +729,7 @@ class ApiClient {
     return data;
   }
 
-  async createStageTemplate(requestData: {
+  async createStageTemplate(requestData: StageAttributes & {
     name: string;
     order_number: number;
     default_responsible_id?: number | null;
@@ -717,7 +742,7 @@ class ApiClient {
 
   async updateStageTemplate(
     id: number,
-    requestData: {
+    requestData: StageAttributes & {
       name?: string;
       order_number?: number;
       default_responsible_id?: number | null;

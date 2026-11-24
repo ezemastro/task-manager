@@ -337,7 +337,7 @@ export default function CreateProjectModal({
 
           <TextField
             fullWidth
-            label="Fecha de Finalización Programada"
+            label="Fecha comprometida de entrega"
             name="deadline"
             type="date"
             value={formData.deadline || ''}
@@ -351,7 +351,7 @@ export default function CreateProjectModal({
             helperText={
               missingWarnings.deadline
                 ? <MissingFieldWarning message={missingWarnings.deadline} />
-                : 'Fecha límite para completar el proyecto'
+                : 'La fecha de entrega acordada con el cliente'
             }
           />
 

@@ -7,13 +7,13 @@ export type ExpectedProjectField = 'client_id' | 'responsible_id' | 'deadline';
 export const EXPECTED_PROJECT_FIELD_LABELS: Record<ExpectedProjectField, string> = {
   client_id: 'Cliente',
   responsible_id: 'Responsable',
-  deadline: 'Fecha límite',
+  deadline: 'Fecha comprometida',
 };
 
 export const MISSING_FIELD_MESSAGES: Record<ExpectedProjectField, string> = {
   client_id: 'Falta el cliente',
   responsible_id: 'Falta el responsable',
-  deadline: 'Falta la fecha límite',
+  deadline: 'Falta la fecha comprometida de entrega',
 };
 
 /** Avisos por campo para un formulario de proyecto (no impiden guardar). */

@@ -313,7 +313,7 @@ export default function EditProjectModal({
 
           <TextField
             margin="normal"
-            label="Fecha límite"
+            label="Fecha comprometida de entrega"
             type="date"
             fullWidth
             value={formData.deadline}

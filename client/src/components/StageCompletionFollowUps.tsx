@@ -11,6 +11,7 @@ import {
 import { apiClient, type Client, type Tag } from '../services/apiClient';
 import EditClientModal from './EditClientModal';
 import ProjectTagsDialog from './ProjectTagsDialog';
+import { isDeliveryStage, type StageAttributes } from '../utils/stageAttributes';
 
 export interface CompletionStageInfo {
   name: string;
@@ -20,21 +21,12 @@ export interface CompletionStageInfo {
   client_id?: number;
 }
 
-// Normaliza un nombre: recorta, minúsculas, sin acentos y colapsa espacios.
-function normalizeStageName(name: string): string {
-  return name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
-}
-
 // El helper se exporta desde este archivo a propósito (lo requiere la spec); se desactiva
 // la regla de fast-refresh que solo admite exportar componentes.
 // eslint-disable-next-line react-refresh/only-export-components
-export function isDeliveryReviewStage(stage: { name: string }): boolean {
-  return normalizeStageName(stage.name) === 'entrega completa y revisada';
+export function isDeliveryReviewStage(stage: StageAttributes): boolean {
+  // Por función ("Marca la entrega", en Etapas predefinidas), no por nombre.
+  return isDeliveryStage(stage);
 }
 
 interface StageCompletionFollowUpsProps {

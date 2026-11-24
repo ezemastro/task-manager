@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Tooltip,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -36,7 +37,7 @@ import { getProjectTypeLabel } from '../utils/projectTypes';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
-import DeadlineChip from './DeadlineChip';
+import DeliveryDatesPanel from './DeliveryDatesPanel';
 import ProjectTagsDialog from './ProjectTagsDialog';
 import { clearProjectReturnSnapshot } from '../utils/projectReturnSnapshot';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
@@ -454,20 +455,9 @@ export default function ProjectDetail() {
                   Actualizado: {formatLocalDate(project.updated_at)}
                 </Typography>
               )}
-              {project.deadline && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Fecha límite:
-                  </Typography>
-                  <DeadlineChip
-                    date={project.deadline}
-                    isCompleted={project.status === 'completed'}
-                    size="small"
-                    showIcon={true}
-                  />
-                </Box>
-              )}
             </Stack>
+
+            {project.delivery && <DeliveryDatesPanel delivery={project.delivery} />}
           </Stack>
         </CardContent>
       </Card>
@@ -510,10 +500,14 @@ export default function ProjectDetail() {
                     >
                       <ArrowUpwardIcon fontSize="small" />
                     </IconButton>
+                    <Tooltip title={stage.is_required ? 'Etapa obligatoria: no se puede eliminar' : 'Eliminar etapa'}>
+                    <span>
                     <IconButton
                       size="small"
                       onClick={() => handleDeleteStageClick(stage)}
-                      sx={{ 
+                      disabled={Boolean(stage.is_required)}
+                      aria-label={stage.is_required ? 'Etapa obligatoria: no se puede eliminar' : 'Eliminar etapa'}
+                      sx={{
                         bgcolor: 'background.paper',
                         border: 1,
                         borderColor: 'divider',
@@ -526,6 +520,8 @@ export default function ProjectDetail() {
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
+                    </span>
+                    </Tooltip>
                     <IconButton
                       size="small"
                       onClick={() => handleMoveStage(stage.id, 'down')}

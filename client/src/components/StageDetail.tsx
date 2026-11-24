@@ -656,7 +656,8 @@ export default function StageDetail() {
             color="error"
             startIcon={<DeleteIcon />}
             onClick={() => setShowDeleteDialog(true)}
-            
+            disabled={Boolean(stage.is_required)}
+            title={stage.is_required ? 'Etapa obligatoria: no se puede eliminar' : undefined}
           >
             Eliminar
           </Button>
