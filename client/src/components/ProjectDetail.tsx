@@ -31,6 +31,7 @@ import PauseCircleIcon from '@mui/icons-material/PauseCircle';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import { apiClient, type Project, type Stage } from '../services/apiClient';
 import { formatLocalDate } from '../utils/dateUtils';
+import { getMissingProjectData } from '../utils/projectRequiredFields';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
@@ -351,6 +352,28 @@ export default function ProjectDetail() {
           {error}
         </Alert>
       )}
+
+      {project.status !== 'completed' && (() => {
+        const missingData = getMissingProjectData({
+          clientName: project.client_name,
+          responsibleName: project.responsible_name,
+          deadline: project.deadline,
+        });
+        if (missingData.length === 0) return null;
+        return (
+          <Alert
+            severity="warning"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={() => setShowEditModal(true)}>
+                Completar datos
+              </Button>
+            }
+          >
+            Faltan datos: {missingData.join(', ')}.
+          </Alert>
+        );
+      })()}
 
       <Card sx={{ mb: 3 }}>
         <CardContent>

@@ -13,13 +13,18 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  FormHelperText,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { apiClient, type CreateProjectRequest, type Client, type User } from '../services/apiClient';
 import CreateClientModal from './CreateClientModal';
+import MissingFieldWarning from './MissingFieldWarning';
 import { dateStringToLocalISO } from '../utils/dateUtils';
+import { getMissingFieldWarnings } from '../utils/projectRequiredFields';
+
+type FormErrors = { name?: string; description?: string };
 
 interface CreateProjectModalProps {
   open: boolean;
@@ -46,9 +51,11 @@ export default function CreateProjectModal({
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [createClientModalOpen, setCreateClientModalOpen] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  // Avisos de datos faltantes: no impiden guardar el proyecto.
+  const missingWarnings = getMissingFieldWarnings(formData);
 
   useEffect(() => {
     fetchClients();
@@ -74,7 +81,7 @@ export default function CreateProjectModal({
   };
 
   const validateForm = (): boolean => {
-    const newErrors: { name?: string; description?: string } = {};
+    const newErrors: FormErrors = {};
 
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre del proyecto es requerido';
@@ -99,14 +106,18 @@ export default function CreateProjectModal({
       ...formData,
       [field]: event.target.value,
     });
-    if (field === 'name' || field === 'description') {
-      if (errors[field]) {
-        setErrors({
-          ...errors,
-          [field]: undefined,
-        });
-      }
+    clearError(field);
+  };
+
+  const clearError = (field: keyof CreateProjectRequest) => {
+    if (field in errors && errors[field as keyof FormErrors]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
+  };
+
+  const setRequiredSelect = (field: 'client_id' | 'responsible_id', value: unknown) => {
+    setFormData((prev) => ({ ...prev, [field]: value ? Number(value) : undefined }));
+    clearError(field);
   };
 
   const handleSubmit = async () => {
@@ -192,7 +203,7 @@ export default function CreateProjectModal({
             <InputLabel>Cliente</InputLabel>
             <Select
               value={formData.client_id || ''}
-              onChange={(e) => setFormData({ ...formData, client_id: e.target.value ? Number(e.target.value) : undefined })}
+              onChange={(e) => setRequiredSelect('client_id', e.target.value)}
               label="Cliente"
               disabled={loading}
             >
@@ -205,6 +216,11 @@ export default function CreateProjectModal({
                 </MenuItem>
               ))}
             </Select>
+            {missingWarnings.client_id && (
+              <FormHelperText component="div">
+                <MissingFieldWarning message={missingWarnings.client_id} />
+              </FormHelperText>
+            )}
           </FormControl>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
@@ -222,7 +238,7 @@ export default function CreateProjectModal({
             <InputLabel>Responsable</InputLabel>
             <Select
               value={formData.responsible_id || ''}
-              onChange={(e) => setFormData({ ...formData, responsible_id: e.target.value ? Number(e.target.value) : undefined })}
+              onChange={(e) => setRequiredSelect('responsible_id', e.target.value)}
               label="Responsable"
               disabled={loading}
             >
@@ -235,6 +251,11 @@ export default function CreateProjectModal({
                 </MenuItem>
               ))}
             </Select>
+            {missingWarnings.responsible_id && (
+              <FormHelperText component="div">
+                <MissingFieldWarning message={missingWarnings.responsible_id} />
+              </FormHelperText>
+            )}
           </FormControl>
 
           <TextField
@@ -296,9 +317,14 @@ export default function CreateProjectModal({
             margin="normal"
             disabled={loading}
             slotProps={{
-              inputLabel: { shrink: true }
+              inputLabel: { shrink: true },
+              formHelperText: { component: 'div' },
             }}
-            helperText="Fecha límite para completar el proyecto"
+            helperText={
+              missingWarnings.deadline
+                ? <MissingFieldWarning message={missingWarnings.deadline} />
+                : 'Fecha límite para completar el proyecto'
+            }
           />
 
           {errorMessage && (
@@ -335,8 +361,10 @@ export default function CreateProjectModal({
       <CreateClientModal
         open={createClientModalOpen}
         onClose={() => setCreateClientModalOpen(false)}
-        onClientCreated={() => {
+        onClientCreated={(client) => {
           fetchClients();
+          // Seleccionar automáticamente el cliente recién creado
+          if (client?.id) setRequiredSelect('client_id', client.id);
           setCreateClientModalOpen(false);
         }}
       />

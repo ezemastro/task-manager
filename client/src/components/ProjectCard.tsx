@@ -14,10 +14,12 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BusinessIcon from '@mui/icons-material/Business';
 import PersonIcon from '@mui/icons-material/Person';
 import LabelIcon from '@mui/icons-material/Label';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { Stage, Tag } from '../services/apiClient';
 import StageInProgressCard from './StageInProgressCard';
 import DeadlineChip from './DeadlineChip';
 import { saveProjectReturnSnapshot, type ProjectReturnFilters } from '../utils/projectReturnSnapshot';
+import { getMissingProjectData } from '../utils/projectRequiredFields';
 
 interface ProjectCardProps {
   projectId: number;
@@ -32,6 +34,8 @@ interface ProjectCardProps {
   onEditTags?: () => void;
   dashboardLocationKey?: string;
   filters?: ProjectReturnFilters;
+  /** Mostrar el aviso "Faltan datos" si falta cliente, responsable o fecha límite. */
+  showMissingDataWarning?: boolean;
 }
 
 export default function ProjectCard({
@@ -46,7 +50,25 @@ export default function ProjectCard({
   dashboardLocationKey,
   filters,
   onEditTags,
+  showMissingDataWarning = true,
 }: ProjectCardProps) {
+  const missingData = showMissingDataWarning
+    ? getMissingProjectData({ clientName, responsibleName, deadline })
+    : [];
+
+  const saveReturnSnapshot = () => {
+    if (dashboardLocationKey && filters) {
+      saveProjectReturnSnapshot({
+        dashboardKey: dashboardLocationKey,
+        projectId,
+        filters,
+        scrollY: window.scrollY,
+        viewportHeight: window.innerHeight,
+        savedAt: Date.now(),
+      });
+    }
+  };
+
   const completedStages = stages.filter(stage => stage.is_completed).length;
   const totalStages = stages.length;
   const progress = totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
@@ -104,6 +126,22 @@ export default function ProjectCard({
             
             {/* Metadata inline */}
             <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+              {missingData.length > 0 && (
+                <Tooltip title={`Completá: ${missingData.join(', ')}`}>
+                  <Chip
+                    icon={<WarningAmberIcon />}
+                    label="Faltan datos"
+                    color="warning"
+                    size="small"
+                    clickable
+                    component={RouterLink}
+                    to={`/projects/${projectId}`}
+                    onClick={saveReturnSnapshot}
+                    aria-label={`Faltan datos: ${missingData.join(', ')}`}
+                    sx={{ flexShrink: 0 }}
+                  />
+                </Tooltip>
+              )}
               {projectDescription && (
                 <Typography 
                   variant="body2" 
@@ -165,18 +203,7 @@ export default function ProjectCard({
           <IconButton
             component={RouterLink}
             to={`/projects/${projectId}`}
-            onClick={() => {
-              if (dashboardLocationKey && filters) {
-                saveProjectReturnSnapshot({
-                  dashboardKey: dashboardLocationKey,
-                  projectId,
-                  filters,
-                  scrollY: window.scrollY,
-                  viewportHeight: window.innerHeight,
-                  savedAt: Date.now(),
-                });
-              }
-            }}
+            onClick={saveReturnSnapshot}
             color="primary"
             size="small"
             aria-label="Ver detalles del proyecto"

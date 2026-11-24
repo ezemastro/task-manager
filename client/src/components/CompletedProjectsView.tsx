@@ -319,6 +319,7 @@ export default function CompletedProjectsView() {
               tags={project.tags}
               onStageCompleted={fetchProjects}
               onEditTags={() => setTagDialogProject(project)}
+              showMissingDataWarning={false}
             />
           ))}
         </Box>

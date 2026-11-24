@@ -13,9 +13,14 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  FormHelperText,
 } from '@mui/material';
 import { apiClient, type Client, type User } from '../services/apiClient';
 import { dateStringToLocalISO, isoToDateString } from '../utils/dateUtils';
+import { getMissingFieldWarnings } from '../utils/projectRequiredFields';
+import MissingFieldWarning from './MissingFieldWarning';
+
+type FormErrors = { name?: string; description?: string };
 
 interface EditProjectModalProps {
   open: boolean;
@@ -50,7 +55,9 @@ export default function EditProjectModal({
   
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
+  const [errors, setErrors] = useState<FormErrors>({});
+  // Avisos de datos faltantes: no impiden guardar el proyecto.
+  const missingWarnings = getMissingFieldWarnings(formData);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -88,7 +95,7 @@ export default function EditProjectModal({
   };
 
   const validateForm = (): boolean => {
-    const newErrors: { name?: string; description?: string } = {};
+    const newErrors: FormErrors = {};
 
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre del proyecto es requerido';
@@ -189,6 +196,11 @@ export default function EditProjectModal({
                 </MenuItem>
               ))}
             </Select>
+            {missingWarnings.client_id && (
+              <FormHelperText component="div">
+                <MissingFieldWarning message={missingWarnings.client_id} />
+              </FormHelperText>
+            )}
           </FormControl>
 
           <FormControl fullWidth margin="normal">
@@ -207,6 +219,11 @@ export default function EditProjectModal({
                 </MenuItem>
               ))}
             </Select>
+            {missingWarnings.responsible_id && (
+              <FormHelperText component="div">
+                <MissingFieldWarning message={missingWarnings.responsible_id} />
+              </FormHelperText>
+            )}
           </FormControl>
 
           <TextField
@@ -265,9 +282,11 @@ export default function EditProjectModal({
             fullWidth
             value={formData.deadline}
             onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+            helperText={missingWarnings.deadline && <MissingFieldWarning message={missingWarnings.deadline} />}
             disabled={loading}
-            InputLabelProps={{
-              shrink: true,
+            slotProps={{
+              inputLabel: { shrink: true },
+              formHelperText: { component: 'div' },
             }}
           />
 

@@ -14,7 +14,7 @@ import { apiClient } from '../services/apiClient';
 interface CreateClientModalProps {
   open: boolean;
   onClose: () => void;
-  onClientCreated: () => void;
+  onClientCreated: (client?: { id: number }) => void;
 }
 
 export default function CreateClientModal({ open, onClose, onClientCreated }: CreateClientModalProps) {
@@ -35,14 +35,14 @@ export default function CreateClientModal({ open, onClose, onClientCreated }: Cr
     setLoading(true);
 
     try {
-      await apiClient.createClient({
+      const created = await apiClient.createClient({
         name: name.trim(),
         preferences: preferences.trim() || undefined,
       });
-      
+
       setName('');
       setPreferences('');
-      onClientCreated();
+      onClientCreated(created);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear el cliente');
