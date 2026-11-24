@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient, type Project, type Stage, type Client, type Tag } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
 import ProjectTagsDialog from './ProjectTagsDialog';
+import ExportYearButton from './ExportYearButton';
 
 interface ProjectWithStages extends Project {
   stages: Stage[];
@@ -160,6 +161,7 @@ export default function CompletedProjectsView() {
           label={`${projects.length} ${projects.length === 1 ? 'proyecto' : 'proyectos'}`} 
           color="success" 
         />
+        <ExportYearButton />
       </Stack>
 
       {error && (

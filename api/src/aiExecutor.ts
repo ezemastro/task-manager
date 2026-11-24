@@ -680,6 +680,8 @@ async function execUpdateProject(args: Record<string, unknown>, ctx: ToolContext
       name,
       description,
       deadline,
+      deadline_change_reason: typeof args.deadline_change_reason === 'string' ? args.deadline_change_reason : undefined,
+      deadline_agreed_with_client: typeof args.deadline_agreed_with_client === 'boolean' ? args.deadline_agreed_with_client : undefined,
       client_id: clientId,
       responsible_id: responsibleId,
     },

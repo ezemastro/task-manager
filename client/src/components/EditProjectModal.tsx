@@ -14,6 +14,8 @@ import {
   Select,
   MenuItem,
   FormHelperText,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import { apiClient, type Client, type User } from '../services/apiClient';
 import { dateStringToLocalISO, isoToDateString } from '../utils/dateUtils';
@@ -35,6 +37,8 @@ interface EditProjectModalProps {
     client_id?: number;
     responsible_id?: number;
     deadline?: string;
+    /** Fecha que usa el indicador de retrasos (si ya hubo una, cambiarla pide motivo). */
+    committed_deadline?: string | null;
     project_type?: ProjectType | null;
   };
 }
@@ -71,6 +75,13 @@ export default function EditProjectModal({
   const missingWarnings = getMissingFieldWarnings(formData);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  // Cambio de fecha comprometida: motivo obligatorio y si fue acordado con el cliente.
+  const [deadlineReason, setDeadlineReason] = useState('');
+  const [deadlineAgreed, setDeadlineAgreed] = useState(false);
+  const [deadlineReasonError, setDeadlineReasonError] = useState('');
+  const initialDeadline = isoToDateString(initialData.deadline);
+  const deadlineChanged = formData.deadline !== initialDeadline;
+  const needsDeadlineReason = deadlineChanged && Boolean(initialDeadline || initialData.committed_deadline);
 
   useEffect(() => {
     if (open) {
@@ -83,6 +94,9 @@ export default function EditProjectModal({
         deadline: isoToDateString(initialData.deadline),
         project_type: initialData.project_type || '',
       });
+      setDeadlineReason('');
+      setDeadlineAgreed(false);
+      setDeadlineReasonError('');
       fetchClients();
       fetchUsers();
     }
@@ -122,7 +136,9 @@ export default function EditProjectModal({
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const reasonOk = !needsDeadlineReason || deadlineReason.trim().length >= 5;
+    setDeadlineReasonError(reasonOk ? '' : 'Escribí el motivo del cambio (al menos 5 caracteres)');
+    return Object.keys(newErrors).length === 0 && reasonOk;
   };
 
   const handleSubmit = async () => {
@@ -140,7 +156,14 @@ export default function EditProjectModal({
         contact: formData.contact.trim() || null,
         client_id: formData.client_id || undefined,
         responsible_id: formData.responsible_id || undefined,
-        deadline: formData.deadline ? dateStringToLocalISO(formData.deadline) : null,
+        // La fecha solo se envía si se cambió (así no se registra un cambio que no existió).
+        ...(deadlineChanged ? {
+          deadline: formData.deadline ? dateStringToLocalISO(formData.deadline) : null,
+          ...(needsDeadlineReason ? {
+            deadline_change_reason: deadlineReason.trim(),
+            deadline_agreed_with_client: deadlineAgreed,
+          } : {}),
+        } : {}),
         project_type: formData.project_type || undefined,
       });
 
@@ -166,7 +189,7 @@ export default function EditProjectModal({
         formData.contact !== (initialData.contact || '') ||
         formData.client_id !== initialData.client_id ||
         formData.responsible_id !== initialData.responsible_id ||
-        formData.deadline !== (initialData.deadline ? initialData.deadline.split('T')[0] : '');
+        deadlineChanged;
       
       if (hasChanges) {
         const confirm = window.confirm(
@@ -325,6 +348,36 @@ export default function EditProjectModal({
               formHelperText: { component: 'div' },
             }}
           />
+
+          {needsDeadlineReason && (
+            <Box sx={{ mt: 1, p: 1.5, border: 1, borderColor: 'warning.main', borderRadius: 1 }}>
+              <TextField
+                label="Motivo del cambio de fecha (obligatorio)"
+                fullWidth
+                multiline
+                minRows={2}
+                size="small"
+                value={deadlineReason}
+                onChange={(e) => {
+                  setDeadlineReason(e.target.value);
+                  if (deadlineReasonError) setDeadlineReasonError('');
+                }}
+                error={!!deadlineReasonError}
+                helperText={deadlineReasonError || 'Queda registrado con tu usuario, la fecha y el valor anterior.'}
+                disabled={loading}
+              />
+              <FormControlLabel
+                sx={{ mt: 0.5 }}
+                control={<Checkbox checked={deadlineAgreed} onChange={(e) => setDeadlineAgreed(e.target.checked)} disabled={loading} />}
+                label="Cambio acordado con el cliente"
+              />
+              <FormHelperText sx={{ mt: 0 }}>
+                {deadlineAgreed
+                  ? 'El indicador de retrasos va a medir contra la nueva fecha.'
+                  : 'Sin acuerdo con el cliente, el indicador de retrasos sigue midiendo contra la fecha comprometida original.'}
+              </FormHelperText>
+            </Box>
+          )}
 
           {errorMessage && (
             <Alert severity="error" sx={{ mt: 2 }}>

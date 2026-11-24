@@ -1,5 +1,8 @@
-import { Box, Chip, Stack, Typography } from '@mui/material';
-import type { ProjectDelivery, Stage } from '../services/apiClient';
+import { useState } from 'react';
+import { Box, Button, Chip, Collapse, Stack, Typography } from '@mui/material';
+import HistoryIcon from '@mui/icons-material/History';
+import type { DeadlineChange, ProjectDelivery, Stage } from '../services/apiClient';
+import { formatLocalDateTime } from '../utils/dateUtils';
 import { getDelayCauseLabel, type HoldPeriod } from '../utils/delayCauses';
 
 // Fechas de calendario ya resueltas por la API (AAAA-MM-DD): se muestran
@@ -45,15 +48,26 @@ export default function DeliveryDatesPanel({
   delivery,
   stages = [],
   projectHolds = [],
+  deadlineChanges = [],
 }: {
   delivery: ProjectDelivery;
   stages?: Stage[];
   projectHolds?: HoldPeriod[];
+  deadlineChanges?: DeadlineChange[];
 }) {
+  const [showHistory, setShowHistory] = useState(false);
+  // La fecha vigente se movió sin acuerdo con el cliente: el indicador sigue con la original.
+  const movedWithoutAgreement = Boolean(delivery.current_deadline) && delivery.current_deadline !== delivery.committed_date;
   const waiting = holdDaysByCause(stages, projectHolds);
   const attribution = delivery.attribution;
   const items = [
-    { label: 'Comprometida', value: delivery.committed_date, hint: 'Acordada con el cliente' },
+    {
+      label: 'Comprometida',
+      value: delivery.committed_date,
+      hint: movedWithoutAgreement
+        ? `Fecha vigente: ${formatCalendarDate(delivery.current_deadline ?? null)} (movida sin acuerdo con el cliente; el retraso se mide contra la comprometida)`
+        : 'Acordada con el cliente',
+    },
     { label: 'Entregada', value: delivery.delivered_date, hint: 'Al terminar "Entrega completa y revisada"' },
     { label: 'Cerrada', value: delivery.closed_date, hint: 'Cierre por parte de cliente (no cuenta para el retraso)' },
   ];
@@ -85,6 +99,29 @@ export default function DeliveryDatesPanel({
           <Chip label={`Estudio: ${pluralDays(attribution.studio_days)}`} size="small" color="warning" variant="outlined" />
           <Chip label={`Cliente: ${pluralDays(attribution.client_days)}`} size="small" color="info" variant="outlined" />
         </Stack>
+      )}
+      {deadlineChanges.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Button size="small" startIcon={<HistoryIcon fontSize="small" />} onClick={() => setShowHistory((value) => !value)}>
+            {showHistory ? 'Ocultar' : 'Ver'} cambios de fecha ({deadlineChanges.length})
+          </Button>
+          <Collapse in={showHistory}>
+            <Stack spacing={0.75} sx={{ mt: 0.5 }}>
+              {deadlineChanges.map((change) => (
+                <Box key={change.id} sx={{ borderLeft: 3, borderColor: change.agreed_with_client ? 'info.main' : 'warning.main', pl: 1 }}>
+                  <Typography variant="body2">
+                    {formatCalendarDate(change.old_deadline)} → <strong>{formatCalendarDate(change.new_deadline)}</strong>
+                    {' · '}
+                    {change.agreed_with_client ? 'Acordado con el cliente' : 'Sin acuerdo con el cliente'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {change.changed_by_name ?? 'Usuario'} · {formatLocalDateTime(change.changed_at)} · Motivo: {change.reason ?? '—'}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Collapse>
+        </Box>
       )}
       {waiting.length > 0 && (
         <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>

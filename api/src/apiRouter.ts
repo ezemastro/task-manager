@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
+import ExcelJS from 'exceljs';
 import { authMiddleware, requireSuperAdmin } from './middleware';
 
 export const apiRouter = Router();
@@ -150,6 +151,47 @@ function ensureDelayCauseColumns() {
           if (alterErr) console.error(`Error al agregar ${name} a stages:`, alterErr.message);
         });
       });
+  });
+}
+
+// ---- Historial de cambios de la fecha comprometida (deadline) ----
+// projects.deadline es la fecha vigente que ve el equipo. projects.committed_deadline
+// es la que usa el indicador de retrasos: la original, que solo cambia cuando el
+// cambio se marca como "acordado con el cliente". Cada cambio queda registrado
+// con usuario, fecha, valor anterior, valor nuevo y motivo (obligatorio).
+const DEADLINE_CHANGE_MIN_REASON = 5;
+
+function ensureDeadlineHistory() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS project_deadline_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      old_deadline TEXT,
+      new_deadline TEXT,
+      reason TEXT,
+      agreed_with_client INTEGER NOT NULL DEFAULT 0,
+      changed_by INTEGER,
+      changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+  db.run('CREATE INDEX IF NOT EXISTS idx_deadline_changes_project ON project_deadline_changes(project_id, changed_at)');
+  db.all('PRAGMA table_info(projects)', (err, columns: Array<{ name: string }>) => {
+    if (err) {
+      console.error('Error al verificar committed_deadline en projects:', err.message);
+      return;
+    }
+    if (columns.some((column) => column.name === 'committed_deadline')) return;
+    db.run('ALTER TABLE projects ADD COLUMN committed_deadline TEXT', (alterErr) => {
+      if (alterErr) return console.error('Error al agregar committed_deadline a projects:', alterErr.message);
+      // Una sola vez: la fecha actual de cada proyecto pasa a ser la comprometida original.
+      db.run('UPDATE projects SET committed_deadline = deadline WHERE committed_deadline IS NULL', (fillErr) => {
+        if (fillErr) console.error('Error al completar committed_deadline:', fillErr.message);
+      });
+    });
   });
 }
 
@@ -442,6 +484,8 @@ function initializeDatabase() {
         });
       });
     });
+
+    ensureDeadlineHistory();
 
     // Tabla de plantillas de etapas
     db.run(`
@@ -825,7 +869,10 @@ interface DeliveryStageRow {
 type DeliveryStatus = 'on_time' | 'late' | 'pending' | 'overdue' | 'no_commitment';
 
 export interface DeliveryInfo {
+  /** Fecha que usa el indicador: la original o la última acordada con el cliente. */
   committed_date: string | null;
+  /** Fecha vigente del proyecto (puede haberse movido sin acuerdo con el cliente). */
+  current_deadline: string | null;
   delivered_date: string | null;
   closed_date: string | null;
   status: DeliveryStatus;
@@ -849,17 +896,18 @@ function daysBetweenCalendarDates(from: string, to: string): number | null {
 }
 
 function computeDeliveryInfo(
-  project: { deadline: string | null; status?: string | null; completed_date?: string | null },
+  project: { deadline: string | null; committed_deadline?: string | null; status?: string | null; completed_date?: string | null },
   stages: DeliveryStageRow[],
   now: Date = new Date(),
 ): DeliveryInfo {
   const deliveredAt = completedStageDate(stages, 'delivery');
   const closedAt = completedStageDate(stages, 'client_closing')
     ?? (project.status === 'completed' ? project.completed_date ?? null : null);
-  const committed = dateOnly(project.deadline);
+  const committed = dateOnly(project.committed_deadline ?? project.deadline);
   const delivered = businessCalendarDate(deliveredAt);
   const base = {
     committed_date: committed,
+    current_deadline: dateOnly(project.deadline),
     delivered_date: delivered,
     closed_date: businessCalendarDate(closedAt),
   };
@@ -967,8 +1015,15 @@ const summaryDbAll = <T = any>(sql: string, params: unknown[]) => new Promise<T[
   db.all(sql, params, (err, rows) => (err ? reject(err) : resolve((rows || []) as T[])));
 });
 
-apiRouter.get('/summary', async (req: Request, res: Response) => {
-  const requestedYear = Number(req.query.year);
+interface SummaryFilters {
+  year: number;
+  currentYear: number;
+  projectType: string | null;
+}
+
+// Año pedido (o el actual en Argentina) y tipo de trabajo validado.
+function parseSummaryFilters(query: Request['query']): SummaryFilters | { error: string } {
+  const requestedYear = Number(query.year);
   const currentYear = Number(new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Argentina/Buenos_Aires',
     year: 'numeric',
@@ -976,14 +1031,29 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
   const year = Number.isInteger(requestedYear) && requestedYear >= 1900 && requestedYear <= 3000
     ? requestedYear
     : currentYear;
-  const projectType = req.query.project_type;
+  const projectType = query.project_type;
   if (projectType !== undefined && projectType !== '' && !isProjectType(projectType)) {
-    return res.status(400).json({ error: 'Tipo de proyecto inválido' });
+    return { error: 'Tipo de proyecto inválido' };
   }
-  const typeFilter = isProjectType(projectType) ? ' AND p.project_type = ?' : '';
-  const typeParams = isProjectType(projectType) ? [projectType] : [];
-  const organizationId = req.user!.organizationId;
-  const yearExpression = (column: string) => `CASE WHEN length(${column}) = 10 THEN substr(${column}, 1, 4) ELSE strftime('%Y', datetime(${column}, '-3 hours')) END`;
+  return { year, currentYear, projectType: isProjectType(projectType) ? projectType : null };
+}
+
+const projectYearExpression = (column: string) => `CASE WHEN length(${column}) = 10 THEN substr(${column}, 1, 4) ELSE strftime('%Y', datetime(${column}, '-3 hours')) END`;
+
+apiRouter.get('/summary', async (req: Request, res: Response) => {
+  const filters = parseSummaryFilters(req.query);
+  if ('error' in filters) return res.status(400).json({ error: filters.error });
+  try {
+    res.json(await buildSummary(req.user!.organizationId, filters));
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Error al calcular el resumen' });
+  }
+});
+
+async function buildSummary(organizationId: number, { year, currentYear, projectType }: SummaryFilters) {
+  const typeFilter = projectType ? ' AND p.project_type = ?' : '';
+  const typeParams = projectType ? [projectType] : [];
+  const yearExpression = projectYearExpression;
 
   const countsSql = `
     SELECT
@@ -1027,7 +1097,7 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
   `;
   // Entregas del año: proyectos cuya etapa de entrega se completó en `year`.
   const deliveryStagesSql = `
-    SELECT p.id as project_id, p.deadline, p.status, p.completed_date as project_completed_date,
+    SELECT p.id as project_id, p.deadline, p.committed_deadline, p.status, p.completed_date as project_completed_date,
            s.milestone, s.is_completed, s.completed_date, s.delay_cause, s.estimated_end_date
     FROM projects p
     INNER JOIN stages s ON s.project_id = p.id
@@ -1050,7 +1120,7 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
     ORDER BY projects DESC, c.name
   `;
 
-  try {
+  {
     const [[counts], stages, deliveryRows, years, clients, holdRows] = await Promise.all([
       summaryDbAll(countsSql, [String(year), String(year), organizationId, ...typeParams]),
       summaryDbAll(stagesSql, [organizationId, String(year), ...typeParams]),
@@ -1069,7 +1139,7 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
     const byProject = new Map<number, { project: any; stages: Array<DeliveryStageRow & DelayCauseStageRow> }>();
     deliveryRows.forEach((row) => {
       const entry = byProject.get(row.project_id) ?? {
-        project: { deadline: row.deadline, status: row.status, completed_date: row.project_completed_date },
+        project: { deadline: row.deadline, committed_deadline: row.committed_deadline, status: row.status, completed_date: row.project_completed_date },
         stages: [],
       };
       entry.stages.push({
@@ -1114,9 +1184,9 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
       ...years.map((row) => Number(row.year)).filter((value) => Number.isInteger(value)),
     ])).sort((a, b) => b - a);
 
-    res.json({
+    return {
       year,
-      project_type: isProjectType(projectType) ? projectType : null,
+      project_type: projectType,
       available_years: availableYears,
       projects_created: Number(counts?.created_count || 0),
       projects_completed: Number(counts?.completed_count || 0),
@@ -1155,9 +1225,334 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
         clients_with_projects: clients.length,
         clients: recurringClients,
       },
+    };
+  }
+}
+
+// ==================== EXPORTAR A EXCEL (evidencia para el SGC) ====================
+// Un archivo .xlsx con las mediciones del año: indicadores del Resumen,
+// proyectos (fechas, estados, retrasos), etapas, esperas y cambios de fecha.
+// Proyectos incluidos: los activos en algún momento del año (creados hasta fin
+// de año y no completados antes de que empiece).
+
+const PROJECT_STATUS_LABELS: Record<string, string> = {
+  active: 'Activo',
+  paused: 'Paralizado',
+  completed: 'Completado',
+};
+const PROJECT_TYPE_EXPORT_LABELS: Record<string, string> = {
+  obra_nueva: 'Obra nueva',
+  carteles: 'Carteles',
+  reforma: 'Reforma',
+};
+const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
+  on_time: 'A tiempo',
+  late: 'Tarde',
+  pending: 'En plazo',
+  overdue: 'Vencido sin entregar',
+  no_commitment: 'Sin fecha comprometida',
+};
+const DELAY_CAUSE_EXPORT_LABELS: Record<string, string> = {
+  client: 'Cliente',
+  internal: 'Interna',
+  missing_info: 'Falta de información',
+  architecture_change: 'Cambio de arquitectura',
+  other: 'Otra',
+};
+const causeLabel = (cause: string | null | undefined) => (cause ? DELAY_CAUSE_EXPORT_LABELS[cause] ?? cause : 'Sin causa');
+const causeSide = (cause: string | null | undefined) => (cause && CLIENT_SIDE_CAUSES.has(cause) ? 'Cliente' : 'Estudio');
+
+// AAAA-MM-DD -> fecha de Excel (sin hora, sin corrimiento de zona).
+function excelDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  return year && month && day ? new Date(Date.UTC(year, month - 1, day)) : null;
+}
+
+// Timestamp del backend -> "dd/mm/aaaa hh:mm" en hora de Argentina.
+function argentinaDateTime(value: string | null | undefined): string {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized) ? normalized : `${normalized}Z`);
+  if (!Number.isFinite(parsed.getTime())) return raw;
+  return new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(parsed);
+}
+
+type ExportColumn = { header: string; key: string; width?: number; date?: boolean };
+
+apiRouter.get('/export/year', async (req: Request, res: Response) => {
+  const filters = parseSummaryFilters(req.query);
+  if ('error' in filters) return res.status(400).json({ error: filters.error });
+  const organizationId = req.user!.organizationId;
+  const { year, projectType } = filters;
+  const typeFilter = projectType ? ' AND p.project_type = ?' : '';
+  const scopeParams = [organizationId, String(year), String(year), ...(projectType ? [projectType] : [])];
+  const activeInYear = `${projectYearExpression('p.created_at')} <= ? AND (p.completed_date IS NULL OR ${projectYearExpression('p.completed_date')} >= ?)`;
+
+  try {
+    const [summary, projects, stages, holds, changes, [organization], [exporter]] = await Promise.all([
+      buildSummary(organizationId, filters),
+      summaryDbAll(`
+        SELECT p.*, c.name as client_name, u.name as responsible_name
+        FROM projects p
+        LEFT JOIN clients c ON c.id = p.client_id
+        LEFT JOIN users u ON u.id = p.responsible_id
+        WHERE p.organization_id = ? AND ${activeInYear}${typeFilter}
+        ORDER BY p.created_at, p.id
+      `, scopeParams),
+      summaryDbAll(`
+        SELECT s.*, u.name as responsible_name
+        FROM stages s
+        INNER JOIN projects p ON p.id = s.project_id
+        LEFT JOIN users u ON u.id = s.responsible_id
+        WHERE p.organization_id = ? AND ${activeInYear}${typeFilter}
+        ORDER BY s.project_id, s.order_number
+      `, scopeParams),
+      summaryDbAll(`
+        SELECT h.*, s.name as stage_name, su.name as started_by_name, eu.name as ended_by_name
+        FROM stage_holds h
+        INNER JOIN projects p ON p.id = h.project_id
+        LEFT JOIN stages s ON s.id = h.stage_id
+        LEFT JOIN users su ON su.id = h.started_by
+        LEFT JOIN users eu ON eu.id = h.ended_by
+        WHERE p.organization_id = ? AND ${activeInYear}${typeFilter}
+        ORDER BY h.started_at
+      `, scopeParams),
+      summaryDbAll(`
+        SELECT dc.*, u.name as changed_by_name
+        FROM project_deadline_changes dc
+        INNER JOIN projects p ON p.id = dc.project_id
+        LEFT JOIN users u ON u.id = dc.changed_by
+        WHERE p.organization_id = ? AND ${activeInYear}${typeFilter}
+        ORDER BY dc.changed_at, dc.id
+      `, scopeParams),
+      summaryDbAll('SELECT name FROM organizations WHERE id = ?', [organizationId]),
+      summaryDbAll('SELECT name FROM users WHERE id = ?', [req.user!.userId]),
+    ]);
+
+    const projectNames = new Map<number, string>(projects.map((project) => [project.id, project.name]));
+    const stagesByProject = new Map<number, any[]>();
+    stages.forEach((stage) => stagesByProject.set(stage.project_id, [...(stagesByProject.get(stage.project_id) ?? []), stage]));
+    const holdsByProject = new Map<number, any[]>();
+    holds.forEach((hold) => holdsByProject.set(hold.project_id, [...(holdsByProject.get(hold.project_id) ?? []), hold]));
+    const changesByProject = new Map<number, number>();
+    changes.forEach((change) => changesByProject.set(change.project_id, (changesByProject.get(change.project_id) ?? 0) + 1));
+    const holdDays = (hold: any) => calendarDurationDays(hold.started_at, hold.ended_at) ?? 0;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'MasGestión';
+    workbook.created = new Date();
+    const addSheet = (name: string, columns: ExportColumn[], rows: Array<Record<string, unknown>>) => {
+      const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 1 }] });
+      sheet.columns = columns.map((column) => ({
+        header: column.header,
+        key: column.key,
+        width: column.width ?? Math.max(12, column.header.length + 2),
+        ...(column.date ? { style: { numFmt: 'dd/mm/yyyy' } } : {}),
+      }));
+      sheet.getRow(1).font = { bold: true };
+      sheet.addRows(rows);
+      sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
+    };
+
+    // 1) Indicadores (los mismos del Resumen)
+    const deliveries = summary.deliveries;
+    const indicators = workbook.addWorksheet('Indicadores');
+    indicators.columns = [{ width: 52 }, { width: 22 }, { width: 80 }];
+    indicators.addRows([
+      ['Exportación de mediciones — MasGestión'],
+      ['Organización', organization?.name ?? ''],
+      ['Año', year],
+      ['Tipo de trabajo', projectType ? PROJECT_TYPE_EXPORT_LABELS[projectType] ?? projectType : 'Todos'],
+      ['Exportado por', exporter?.name ?? ''],
+      ['Fecha de exportación', argentinaDateTime(new Date().toISOString())],
+      [],
+      ['Indicador', 'Valor', 'Detalle'],
+      ['Entregados a tiempo (objetivo 1.1)', deliveries.on_time_percentage != null ? `${deliveries.on_time_percentage}%` : '—', `${deliveries.on_time} de ${deliveries.with_commitment} entregas con fecha comprometida (no incluye el cierre del cliente)`],
+      ['Entregas tarde', deliveries.late, ''],
+      ['Retraso promedio (días)', deliveries.average_delay_days ?? '—', 'Promedio de los proyectos entregados tarde'],
+      ['Días de retraso totales', deliveries.total_delay_days, ''],
+      ['Retraso atribuible al estudio (días)', deliveries.studio_delay_days, deliveries.studio_delay_percentage != null ? `${deliveries.studio_delay_percentage}%` : ''],
+      ['Retraso atribuible al cliente (días)', deliveries.client_delay_days, deliveries.client_delay_percentage != null ? `${deliveries.client_delay_percentage}% · causas Cliente, Falta de información y Cambio de arquitectura` : ''],
+      ['Proyectos completados (denominador objetivo 1.3)', summary.projects_completed, ''],
+      ['Proyectos creados', summary.projects_created, ''],
+      ['Clientes recurrentes (más de 2 proyectos en el año)', summary.recurring_clients.count, summary.recurring_clients.clients.map((client) => `${client.name} (${client.projects})`).join(', ')],
+      ['Días de trabajo (etapas que suman tiempo)', summary.work_days, ''],
+      [],
+      ['Días en espera por causa', 'Días', 'Atribuible a'],
+      ...Object.entries(summary.hold_days_by_cause).map(([cause, days]) => [cause === 'unspecified' ? 'Sin causa' : causeLabel(cause), days, cause === 'unspecified' ? 'Estudio' : causeSide(cause)]),
+      [],
+      ['El retraso se mide contra la fecha comprometida original o la última acordada con el cliente (ver hoja "Cambios de fecha").'],
+    ]);
+    indicators.getRow(1).font = { bold: true, size: 14 };
+    indicators.eachRow((row) => {
+      const first = String(row.getCell(1).value ?? '');
+      if (first === 'Indicador' || first === 'Días en espera por causa') row.font = { bold: true };
     });
+
+    // 2) Proyectos
+    addSheet('Proyectos', [
+      { header: 'ID', key: 'id', width: 7 },
+      { header: 'Proyecto', key: 'name', width: 34 },
+      { header: 'Tipo', key: 'type' },
+      { header: 'Cliente', key: 'client', width: 24 },
+      { header: 'Responsable', key: 'responsible', width: 20 },
+      { header: 'Estado', key: 'status' },
+      { header: 'Creado', key: 'created', date: true },
+      { header: 'Fecha comprometida (indicador)', key: 'committed', date: true, width: 16 },
+      { header: 'Fecha vigente', key: 'current', date: true },
+      { header: 'Cambios de fecha', key: 'changes' },
+      { header: 'Entregada', key: 'delivered', date: true },
+      { header: 'Cerrada', key: 'closed', date: true },
+      { header: 'Resultado de la entrega', key: 'delivery_status', width: 22 },
+      { header: 'Días de retraso', key: 'delay' },
+      { header: 'Retraso estudio (días)', key: 'studio' },
+      { header: 'Retraso cliente (días)', key: 'client_delay' },
+      { header: 'Días en espera', key: 'hold_days' },
+      { header: 'Completado', key: 'completed', date: true },
+      { header: 'Etapas completadas', key: 'stages_done' },
+      { header: 'Etapas totales', key: 'stages_total' },
+      { header: 'Obligatorias pendientes', key: 'required_pending', width: 30 },
+    ], projects.map((project) => {
+      const projectStages = stagesByProject.get(project.id) ?? [];
+      const projectHolds = holdsByProject.get(project.id) ?? [];
+      const info = computeDeliveryInfo(project, projectStages);
+      const attribution = computeDelayAttribution(info, projectHolds, projectStages);
+      return {
+        id: project.id,
+        name: project.name,
+        type: project.project_type ? PROJECT_TYPE_EXPORT_LABELS[project.project_type] ?? project.project_type : '',
+        client: project.client_name ?? 'Sin cliente',
+        responsible: project.responsible_name ?? 'Sin responsable',
+        status: PROJECT_STATUS_LABELS[project.status] ?? project.status,
+        created: excelDate(businessCalendarDate(project.created_at)),
+        committed: excelDate(info.committed_date),
+        current: excelDate(info.current_deadline),
+        changes: changesByProject.get(project.id) ?? 0,
+        delivered: excelDate(info.delivered_date),
+        closed: excelDate(info.closed_date),
+        delivery_status: DELIVERY_STATUS_LABELS[info.status],
+        delay: info.delay_days,
+        studio: attribution?.studio_days ?? 0,
+        client_delay: attribution?.client_days ?? 0,
+        hold_days: projectHolds.reduce((sum, hold) => sum + holdDays(hold), 0),
+        completed: excelDate(businessCalendarDate(project.completed_date)),
+        stages_done: projectStages.filter((stage) => stage.is_completed).length,
+        stages_total: projectStages.length,
+        required_pending: projectStages
+          .filter((stage) => stage.is_required && !stage.is_completed && !stage.not_applicable)
+          .map((stage) => stage.name).join(', '),
+      };
+    }));
+
+    // 3) Etapas
+    const today = businessCalendarDate(new Date().toISOString()) as string;
+    addSheet('Etapas', [
+      { header: 'Proyecto', key: 'project', width: 30 },
+      { header: 'Orden', key: 'order', width: 8 },
+      { header: 'Etapa', key: 'name', width: 30 },
+      { header: 'Tipo', key: 'kind' },
+      { header: 'Obligatoria', key: 'required' },
+      { header: 'Responsable', key: 'responsible', width: 20 },
+      { header: 'Estado', key: 'status' },
+      { header: 'Inicio', key: 'start', date: true },
+      { header: 'Fin estimado', key: 'estimated', date: true },
+      { header: 'Completada', key: 'completed', date: true },
+      { header: 'Superó la fecha estimada', key: 'overdue' },
+      { header: 'Causa del retraso', key: 'delay_cause', width: 22 },
+      { header: 'Atribuible a', key: 'delay_side' },
+      { header: 'Nota de la causa', key: 'delay_note', width: 30 },
+      { header: 'Días en espera', key: 'hold_days' },
+      { header: 'Motivo "No aplica"', key: 'na_reason', width: 30 },
+    ], stages.map((stage) => {
+      const stageHolds = (holdsByProject.get(stage.project_id) ?? []).filter((hold) => hold.stage_id === stage.id);
+      const estimated = dateOnly(stage.estimated_end_date);
+      const end = stage.is_completed ? businessCalendarDate(stage.completed_date) : today;
+      const overdue = Boolean(estimated && end && end > estimated && !stage.not_applicable);
+      const onHold = stageHolds.some((hold) => !hold.ended_at);
+      return {
+        project: projectNames.get(stage.project_id) ?? '',
+        order: stage.order_number,
+        name: stage.name,
+        kind: stage.stage_kind === 'control' ? 'Control' : 'Ejecución',
+        required: stage.is_required ? 'Sí' : 'No',
+        responsible: stage.responsible_name ?? '',
+        status: stage.is_completed ? 'Completada' : stage.not_applicable ? 'No aplica' : onHold ? 'En espera' : stage.start_date ? 'En curso' : 'Pendiente',
+        start: excelDate(businessCalendarDate(stage.start_date)),
+        estimated: excelDate(estimated),
+        completed: excelDate(businessCalendarDate(stage.completed_date)),
+        overdue: overdue ? 'Sí' : 'No',
+        delay_cause: stage.delay_cause ? causeLabel(stage.delay_cause) : overdue ? 'Sin indicar' : '',
+        delay_side: stage.delay_cause ? causeSide(stage.delay_cause) : '',
+        delay_note: stage.delay_cause_note ?? '',
+        hold_days: stageHolds.reduce((sum, hold) => sum + holdDays(hold), 0),
+        na_reason: stage.not_applicable ? stage.not_applicable_reason ?? '' : '',
+      };
+    }));
+
+    // 4) Esperas (etapas en espera y proyectos paralizados)
+    addSheet('Esperas', [
+      { header: 'Proyecto', key: 'project', width: 30 },
+      { header: 'Etapa', key: 'stage', width: 30 },
+      { header: 'Causa', key: 'cause', width: 22 },
+      { header: 'Atribuible a', key: 'side' },
+      { header: 'Nota', key: 'note', width: 30 },
+      { header: 'Desde', key: 'from', width: 18 },
+      { header: 'Hasta', key: 'to', width: 18 },
+      { header: 'Días', key: 'days', width: 8 },
+      { header: 'Puesta por', key: 'by', width: 20 },
+      { header: 'Reanudada por', key: 'ended_by', width: 20 },
+    ], holds.map((hold) => ({
+      project: projectNames.get(hold.project_id) ?? '',
+      stage: hold.stage_id ? hold.stage_name ?? '' : 'Proyecto paralizado',
+      cause: causeLabel(hold.cause),
+      side: causeSide(hold.cause),
+      note: hold.note ?? '',
+      from: argentinaDateTime(hold.started_at),
+      to: hold.ended_at ? argentinaDateTime(hold.ended_at) : 'Sigue en espera',
+      days: holdDays(hold),
+      by: hold.started_by_name ?? '',
+      ended_by: hold.ended_by_name ?? '',
+    })));
+
+    // 5) Cambios de fecha comprometida
+    addSheet('Cambios de fecha', [
+      { header: 'Proyecto', key: 'project', width: 30 },
+      { header: 'Fecha anterior', key: 'old', date: true, width: 14 },
+      { header: 'Fecha nueva', key: 'new', date: true, width: 14 },
+      { header: 'Acordado con el cliente', key: 'agreed', width: 14 },
+      { header: 'Motivo', key: 'reason', width: 40 },
+      { header: 'Usuario', key: 'by', width: 20 },
+      { header: 'Fecha del cambio', key: 'at', width: 18 },
+    ], changes.map((change) => ({
+      project: projectNames.get(change.project_id) ?? '',
+      old: excelDate(dateOnly(change.old_deadline)),
+      new: excelDate(dateOnly(change.new_deadline)),
+      agreed: change.agreed_with_client ? 'Sí' : 'No',
+      reason: change.reason ?? '',
+      by: change.changed_by_name ?? '',
+      at: argentinaDateTime(change.changed_at),
+    })));
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileName = `masgestion-mediciones-${year}${projectType ? `-${projectType}` : ''}.xlsx`;
+    logAudit({
+      organizationId,
+      userId: req.user!.userId,
+      action: 'EXPORT',
+      entityType: 'summary',
+      details: JSON.stringify({ year, project_type: projectType, projects: projects.length }),
+      ipAddress: req.ip,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(Buffer.from(buffer as ArrayBuffer));
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Error al calcular el resumen' });
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Error al exportar' });
   }
 });
 
@@ -1626,8 +2021,8 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
   }
 
   const normalizedContact = typeof contact === 'string' ? contact.trim() || null : null;
-  const sql = 'INSERT INTO projects (organization_id, name, description, contact, client_id, responsible_id, deadline, project_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [organizationId, name, description || null, normalizedContact, client_id || null, responsible_id || null, deadline || null, project_type], function (err) {
+  const sql = 'INSERT INTO projects (organization_id, name, description, contact, client_id, responsible_id, deadline, project_type, committed_deadline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [organizationId, name, description || null, normalizedContact, client_id || null, responsible_id || null, deadline || null, project_type, deadline || null], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1943,6 +2338,15 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
             }));
             const delivery = computeDeliveryInfo(project as any, stages);
             delivery.attribution = computeDelayAttribution(delivery, holds, stages);
+            const changesSql = `
+              SELECT dc.id, dc.old_deadline, dc.new_deadline, dc.reason, dc.agreed_with_client, dc.changed_at, u.name as changed_by_name
+              FROM project_deadline_changes dc
+              LEFT JOIN users u ON u.id = dc.changed_by
+              WHERE dc.project_id = ?
+              ORDER BY dc.changed_at, dc.id
+            `;
+            db.all(changesSql, [id], (changesErr, changeRows: any[]) => {
+            if (changesErr) console.error('Error fetching deadline changes:', changesErr);
 
             res.json({
               ...project,
@@ -1957,7 +2361,14 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
               }),
               tags: projectTags || [],
               project_holds: holds.filter((hold) => hold.stage_id == null),
+              deadline_changes: (changesErr ? [] : changeRows).map((change) => ({
+                ...change,
+                old_deadline: dateOnly(change.old_deadline),
+                new_deadline: dateOnly(change.new_deadline),
+                agreed_with_client: Boolean(change.agreed_with_client),
+              })),
               delivery,
+            });
             });
           });
         });
@@ -1969,7 +2380,7 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, contact, status, client_id, responsible_id, deadline, project_type, pause_cause, pause_note } = req.body;
+  const { name, description, contact, status, client_id, responsible_id, deadline, project_type, pause_cause, pause_note, deadline_change_reason, deadline_agreed_with_client } = req.body;
   const organizationId = req.user!.organizationId;
 
   if (project_type !== undefined && !isProjectType(project_type)) {
@@ -2006,9 +2417,27 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
     });
   };
 
-  ensureRequiredStagesResolved(() => db.get('SELECT status, completed_date FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (lookupError, existingProject: any) => {
+  ensureRequiredStagesResolved(() => db.get('SELECT status, completed_date, deadline, committed_deadline FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (lookupError, existingProject: any) => {
     if (lookupError) return res.status(500).json({ error: lookupError.message });
     if (!existingProject) return res.status(404).json({ error: 'Proyecto no encontrado' });
+
+    // Cambio de la fecha comprometida: fijarla por primera vez no pide motivo;
+    // moverla o quitarla, sí. Solo un cambio "acordado con el cliente" mueve
+    // la fecha que usa el indicador de retrasos (committed_deadline).
+    const previousDeadline = dateOnly(existingProject.deadline);
+    const nextDeadline = deadline === undefined ? undefined : dateOnly(deadline);
+    const deadlineChanged = deadline !== undefined && nextDeadline !== previousDeadline;
+    // "Inicial" solo si nunca hubo fecha comprometida (evita quitarla y volver a
+    // ponerla para saltear el motivo).
+    const isInitialDeadline = deadlineChanged && !previousDeadline && !existingProject.committed_deadline;
+    const changeReason = typeof deadline_change_reason === 'string' ? deadline_change_reason.trim() : '';
+    const agreedWithClient = isInitialDeadline || deadline_agreed_with_client === true;
+    if (deadlineChanged && !isInitialDeadline && changeReason.length < DEADLINE_CHANGE_MIN_REASON) {
+      return res.status(400).json({
+        error: 'Para cambiar la fecha comprometida escribí el motivo (al menos 5 caracteres) e indicá si fue acordado con el cliente.',
+        requires_deadline_change_reason: true,
+      });
+    }
 
     const updates: string[] = [];
     const values: any[] = [];
@@ -2048,6 +2477,10 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
     if (deadline !== undefined) {
       updates.push('deadline = ?');
       values.push(deadline);
+      if (deadlineChanged && agreedWithClient) {
+        updates.push('committed_deadline = ?');
+        values.push(deadline || null);
+      }
     }
     // Cambiar el tipo no modifica las etapas que el proyecto ya tiene.
     if (project_type !== undefined) {
@@ -2066,6 +2499,15 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
     db.run(sql, values, function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) return res.status(404).json({ error: 'Proyecto no encontrado' });
+
+      if (deadlineChanged) {
+        db.run(
+          `INSERT INTO project_deadline_changes (organization_id, project_id, old_deadline, new_deadline, reason, agreed_with_client, changed_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [organizationId, id, existingProject.deadline ?? null, deadline || null, changeReason || (isInitialDeadline ? 'Fecha inicial' : null), agreedWithClient ? 1 : 0, req.user!.userId],
+          (historyErr) => { if (historyErr) console.error('Error al registrar el cambio de fecha:', historyErr.message); },
+        );
+      }
 
       // Períodos de espera del proyecto: al paralizar se abre uno con la causa;
       // al reactivar o completar se cierra. Completar cierra también las esperas de etapas.
@@ -2093,7 +2535,7 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
         entityType: 'project',
         entityId: Number(id),
         projectName: projectName,
-          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline, project_type, pause_cause: pauseCause?.cause, pause_note: pauseCause?.note }),
+          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline, project_type, pause_cause: pauseCause?.cause, pause_note: pauseCause?.note, ...(deadlineChanged ? { previous_deadline: existingProject.deadline ?? null, deadline_change_reason: changeReason || null, deadline_agreed_with_client: agreedWithClient } : {}) }),
         ipAddress: req.ip
       });
       });

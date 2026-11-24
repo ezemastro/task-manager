@@ -1,3 +1,4 @@
+import ExportYearButton from './ExportYearButton';
 import { useEffect, useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
@@ -380,6 +381,7 @@ export default function ProjectsList() {
           Mis Proyectos
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          <ExportYearButton />
           <Button 
             variant="outlined" 
             startIcon={<FilterListIcon />}

@@ -42,11 +42,15 @@ export interface Project {
   responsible_id?: number;
   responsible_name?: string;
   deadline?: string;
+  /** Fecha que usa el indicador de retrasos (original o última acordada con el cliente). */
+  committed_deadline?: string | null;
   project_type?: ProjectType | null;
   /** Solo en GET /projects/:id: fechas comprometida/entregada/cerrada y retraso. */
   delivery?: ProjectDelivery;
   /** Solo en GET /projects/:id: períodos en que el proyecto estuvo paralizado. */
   project_holds?: HoldPeriod[];
+  /** Solo en GET /projects/:id: historial de cambios de la fecha comprometida. */
+  deadline_changes?: DeadlineChange[];
   created_at: string;
   updated_at: string;
   total_stages?: number;
@@ -188,6 +192,19 @@ export interface UpdateProjectRequest {
   /** Al paralizar: causa y nota (obligatoria si la causa es "Otra"). */
   pause_cause?: DelayCause;
   pause_note?: string | null;
+  /** Obligatorio al mover una fecha comprometida existente. */
+  deadline_change_reason?: string;
+  deadline_agreed_with_client?: boolean;
+}
+
+export interface DeadlineChange {
+  id: number;
+  old_deadline: string | null;
+  new_deadline: string | null;
+  reason: string | null;
+  agreed_with_client: boolean;
+  changed_at: string;
+  changed_by_name?: string | null;
 }
 
 export interface ProjectSummaryStage {
@@ -235,7 +252,10 @@ export interface ProjectSummary {
 // Retraso medido entre la fecha comprometida y la entrega real (etapa
 // "Entrega completa y revisada"); el cierre del cliente no cuenta.
 export interface ProjectDelivery {
+  /** Fecha que usa el indicador: la original o la última acordada con el cliente. */
   committed_date: string | null;
+  /** Fecha vigente del proyecto. */
+  current_deadline?: string | null;
   delivered_date: string | null;
   closed_date: string | null;
   status: 'on_time' | 'late' | 'pending' | 'overdue' | 'no_commitment';
@@ -529,6 +549,24 @@ class ApiClient {
       params: projectType ? { year, project_type: projectType } : { year },
     });
     return data;
+  }
+
+  /** Descarga el Excel con las mediciones del año (indicadores, proyectos, etapas, esperas y cambios de fecha). */
+  async downloadYearExport(year: number, projectType?: ProjectType | null): Promise<void> {
+    const response = await this.api.get<Blob>('/export/year', {
+      params: projectType ? { year, project_type: projectType } : { year },
+      responseType: 'blob',
+    });
+    const disposition = String(response.headers['content-disposition'] ?? '');
+    const fileName = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? `masgestion-mediciones-${year}.xlsx`;
+    const url = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   // ==================== STAGES ====================

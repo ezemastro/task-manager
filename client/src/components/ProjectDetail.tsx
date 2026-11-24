@@ -480,7 +480,7 @@ export default function ProjectDetail() {
               )}
             </Stack>
 
-            {project.delivery && <DeliveryDatesPanel delivery={project.delivery} stages={stages} projectHolds={project.project_holds ?? []} />}
+            {project.delivery && <DeliveryDatesPanel delivery={project.delivery} stages={stages} projectHolds={project.project_holds ?? []} deadlineChanges={project.deadline_changes ?? []} />}
           </Stack>
         </CardContent>
       </Card>
@@ -612,6 +612,7 @@ export default function ProjectDetail() {
           client_id: project.client_id,
           responsible_id: project.responsible_id,
           deadline: project.deadline,
+          committed_deadline: project.committed_deadline,
           project_type: project.project_type,
         }}
       />

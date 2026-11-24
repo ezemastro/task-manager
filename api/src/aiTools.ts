@@ -192,6 +192,8 @@ const updateProjectSchema: ToolSchema = {
   name: { kind: 'string', required: false, maxLength: 200 },
   description: { kind: 'string', required: false, maxLength: 2000 },
   deadline: { kind: 'date', required: false },
+  deadline_change_reason: { kind: 'string', required: false, maxLength: 500 },
+  deadline_agreed_with_client: { kind: 'bool', required: false },
   client_id: { kind: 'int', required: false, min: 1 },
   responsible_id: { kind: 'int', required: false, min: 1 },
 };
@@ -242,7 +244,7 @@ export const writeTools: AiToolDefinition[] = [
     class: 'write',
     schema: updateProjectSchema,
     summary:
-      'update_project(project_id:int, name?:string, description?:string, deadline?:date, client_id?:int, responsible_id?:int) — updates a project you own; at least one field besides project_id is required',
+      'update_project(project_id:int, name?:string, description?:string, deadline?:date, deadline_change_reason?:string, deadline_agreed_with_client?:bool, client_id?:int, responsible_id?:int) — updates a project you own; at least one field besides project_id is required. Moving an existing deadline REQUIRES deadline_change_reason (min 5 chars) and deadline_agreed_with_client (ask the user for both; only agreed changes move the committed date used by the delay indicator)',
     resourceHints: ['projects', 'project:<id>'],
   },
   {

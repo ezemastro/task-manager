@@ -32,6 +32,7 @@ import CallSplitIcon from '@mui/icons-material/CallSplit';
 import { apiClient, type ProjectSummary } from '../services/apiClient';
 import { PROJECT_TYPES, PROJECT_TYPE_LABELS, type ProjectType } from '../utils/projectTypes';
 import { DELAY_CAUSES, getCauseSide, getDelayCauseLabel } from '../utils/delayCauses';
+import ExportYearButton from './ExportYearButton';
 
 const currentYear = Number(new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Argentina/Buenos_Aires',
@@ -127,7 +128,8 @@ export default function SummaryView() {
           <Typography variant="h3" component="h1" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>Resumen de proyectos</Typography>
           <Typography color="text.secondary">Una lectura rápida del trabajo que llegó a término.</Typography>
         </Box>
-        <Stack direction="row" spacing={1.5}>
+        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+          <ExportYearButton year={year} projectType={projectType || null} />
           <FormControl sx={{ minWidth: 160 }} size="small">
             <InputLabel id="summary-type-label">Tipo de trabajo</InputLabel>
             <Select

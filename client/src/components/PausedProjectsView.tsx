@@ -23,6 +23,7 @@ import PauseCircleIcon from '@mui/icons-material/PauseCircle';
 import { useNavigate } from 'react-router-dom';
 import { apiClient, type Project, type Stage, type Client } from '../services/apiClient';
 import ProjectCard from './ProjectCard';
+import ExportYearButton from './ExportYearButton';
 
 interface ProjectWithStages extends Project {
   stages: Stage[];
@@ -144,6 +145,7 @@ export default function PausedProjectsView() {
           color="warning"
           icon={<PauseCircleIcon />}
         />
+        <ExportYearButton />
       </Stack>
 
       {error && (
