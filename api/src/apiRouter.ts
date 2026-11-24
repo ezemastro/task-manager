@@ -988,12 +988,13 @@ apiRouter.put('/stage-templates/reorder', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Se requiere un array de plantillas' });
   }
 
-  // Actualizar el order_number de cada plantilla
-  const stmt = db.prepare('UPDATE stage_templates SET order_number = ? WHERE id = ?');
-  
+  // Actualizar el order_number de cada plantilla (solo de esta organización)
+  const organizationId = req.user!.organizationId;
+  const stmt = db.prepare('UPDATE stage_templates SET order_number = ? WHERE id = ? AND organization_id = ?');
+
   try {
     templates.forEach((template: { id: number; order_number: number }) => {
-      stmt.run(template.order_number, template.id);
+      stmt.run(template.order_number, template.id, organizationId);
     });
     stmt.finalize();
     res.json({ message: 'Plantillas reordenadas exitosamente' });

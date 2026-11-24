@@ -88,7 +88,8 @@ export default function StageTemplatesManagement() {
     setSelectedTemplate(null);
     setFormData({
       name: '',
-      order_number: templates.length + 1,
+      // Va al final: después del número más alto (por si quedaron huecos de antes).
+      order_number: templates.reduce((max, t) => Math.max(max, t.order_number), 0) + 1,
       default_responsible_id: '',
       estimated_duration_days: '',
     });
@@ -145,6 +146,13 @@ export default function StageTemplatesManagement() {
       await apiClient.deleteStageTemplate(selectedTemplate.id);
       setDeleteDialogOpen(false);
       setSelectedTemplate(null);
+      // Renumerar las que quedan para no dejar huecos (1, 2, 4…).
+      const remaining = templates
+        .filter((t) => t.id !== selectedTemplate.id)
+        .map((t, index) => ({ id: t.id, order_number: index + 1 }));
+      if (remaining.length > 0) {
+        await apiClient.reorderStageTemplates(remaining);
+      }
       fetchTemplates();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar la plantilla');
@@ -162,20 +170,17 @@ export default function StageTemplatesManagement() {
     }
 
     const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    const newTemplates = [...templates];
-    [newTemplates[currentIndex], newTemplates[newIndex]] = [newTemplates[newIndex], newTemplates[currentIndex]];
-    
+    const swapped = [...templates];
+    [swapped[currentIndex], swapped[newIndex]] = [swapped[newIndex], swapped[currentIndex]];
+    // El número de orden es siempre la posición en la lista (1, 2, 3…).
+    const newTemplates = swapped.map((t, index) => ({ ...t, order_number: index + 1 }));
+
     // Actualizar orden local inmediatamente para UX
     setTemplates(newTemplates);
 
     try {
       // Enviar nuevo orden al backend
-      const templateOrders = newTemplates.map((t, index) => ({
-        id: t.id,
-        order_number: index + 1
-      }));
-      
-      await apiClient.reorderStageTemplates(templateOrders);
+      await apiClient.reorderStageTemplates(newTemplates.map((t) => ({ id: t.id, order_number: t.order_number })));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al reordenar');
       // Revertir en caso de error
@@ -248,7 +253,7 @@ export default function StageTemplatesManagement() {
             ) : (
               templates.map((template, index) => (
                 <TableRow key={template.id}>
-                  <TableCell>{template.order_number}</TableCell>
+                  <TableCell>{index + 1}</TableCell>
                   <TableCell><strong>{template.name}</strong></TableCell>
                   <TableCell>{template.default_responsible_name || 'Sin asignar'}</TableCell>
                   <TableCell>{template.estimated_duration_days || '-'}</TableCell>
