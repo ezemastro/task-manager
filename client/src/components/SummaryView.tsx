@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Alert,
   Box,
@@ -25,15 +25,52 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import GroupsIcon from '@mui/icons-material/Groups';
 import { apiClient, type ProjectSummary } from '../services/apiClient';
+import { PROJECT_TYPES, PROJECT_TYPE_LABELS, type ProjectType } from '../utils/projectTypes';
 
 const currentYear = Number(new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Argentina/Buenos_Aires',
   year: 'numeric',
 }).format(new Date()));
 
+// Tarjeta de indicador: título, valor grande y una línea de detalle.
+function IndicatorCard({
+  icon,
+  color,
+  title,
+  value,
+  detail,
+}: {
+  icon: ReactNode;
+  color: 'primary' | 'success' | 'warning' | 'info' | 'error';
+  title: string;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <Card sx={{ height: '100%', borderTop: 4, borderColor: `${color}.main` }}>
+      <CardContent>
+        <Stack direction="row" spacing={2} alignItems="flex-start">
+          {icon}
+          <Box sx={{ minWidth: 0 }}>
+            <Typography color="text.secondary" variant="body2">{title}</Typography>
+            <Typography variant="h3" sx={{ fontWeight: 700 }}>{value}</Typography>
+            {detail && <Typography color="text.secondary" variant="caption" component="p">{detail}</Typography>}
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+const pluralDays = (days: number) => `${days} ${days === 1 ? 'día' : 'días'}`;
+
 export default function SummaryView() {
   const [year, setYear] = useState(currentYear);
+  // '' = todos los tipos de trabajo.
+  const [projectType, setProjectType] = useState<ProjectType | ''>('');
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -42,7 +79,7 @@ export default function SummaryView() {
     let active = true;
     setLoading(true);
     setError('');
-    apiClient.getProjectSummary(year)
+    apiClient.getProjectSummary(year, projectType || null)
       .then((data) => {
         if (!active) return;
         setSummary(data);
@@ -55,7 +92,11 @@ export default function SummaryView() {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [year]);
+  }, [year, projectType]);
+
+  const deliveries = summary?.deliveries;
+  const recurring = summary?.recurring_clients;
+  const typeLabel = projectType ? ` · ${PROJECT_TYPE_LABELS[projectType]}` : '';
 
   // Keep the requested/server-selected year in the options while a new response loads.
   // This prevents MUI Select from receiving a value that is not represented by a MenuItem.
@@ -80,12 +121,26 @@ export default function SummaryView() {
           <Typography variant="h3" component="h1" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>Resumen de proyectos</Typography>
           <Typography color="text.secondary">Una lectura rápida del trabajo que llegó a término.</Typography>
         </Box>
-        <FormControl sx={{ minWidth: 150 }} size="small">
-          <InputLabel id="summary-year-label">Año</InputLabel>
-          <Select labelId="summary-year-label" value={year} label="Año" onChange={(event) => setYear(Number(event.target.value))}>
-            {years.map((availableYear) => <MenuItem key={availableYear} value={availableYear}>{availableYear}</MenuItem>)}
-          </Select>
-        </FormControl>
+        <Stack direction="row" spacing={1.5}>
+          <FormControl sx={{ minWidth: 160 }} size="small">
+            <InputLabel id="summary-type-label">Tipo de trabajo</InputLabel>
+            <Select
+              labelId="summary-type-label"
+              value={projectType}
+              label="Tipo de trabajo"
+              onChange={(event) => setProjectType(event.target.value as ProjectType | '')}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {PROJECT_TYPES.map((type) => <MenuItem key={type} value={type}>{PROJECT_TYPE_LABELS[type]}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 110 }} size="small">
+            <InputLabel id="summary-year-label">Año</InputLabel>
+            <Select labelId="summary-year-label" value={year} label="Año" onChange={(event) => setYear(Number(event.target.value))}>
+              {years.map((availableYear) => <MenuItem key={availableYear} value={availableYear}>{availableYear}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Stack>
       </Stack>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
@@ -93,48 +148,67 @@ export default function SummaryView() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
       ) : summary ? (
         <Stack spacing={3}>
+          {/* Indicadores de los objetivos de calidad (Manual de Calidad MDC_5). */}
           <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card sx={{ height: '100%', borderTop: 4, borderColor: 'primary.main' }}>
-                <CardContent>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <EventAvailableIcon color="primary" />
-                    <Box><Typography color="text.secondary" variant="body2">Proyectos creados en {summary.year}</Typography><Typography variant="h3" sx={{ fontWeight: 700 }}>{summary.projects_created}</Typography></Box>
-                  </Stack>
-                </CardContent>
-              </Card>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <IndicatorCard
+                icon={<CheckCircleOutlineIcon color="success" />}
+                color="success"
+                title={`Entregados a tiempo · ${summary.year}${typeLabel}`}
+                value={deliveries?.on_time_percentage != null ? `${deliveries.on_time_percentage}%` : '—'}
+                detail={deliveries && deliveries.with_commitment > 0
+                  ? `Objetivo 1.1 · ${deliveries.on_time} de ${deliveries.with_commitment} entregas con fecha comprometida. No incluye el cierre del cliente.`
+                  : 'Objetivo 1.1 · Sin entregas con fecha comprometida en el período.'}
+              />
             </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card sx={{ height: '100%', borderTop: 4, borderColor: 'success.main' }}>
-                <CardContent>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <CheckCircleOutlineIcon color="success" />
-                    <Box><Typography color="text.secondary" variant="body2">Proyectos completados en {summary.year}</Typography><Typography variant="h3" sx={{ fontWeight: 700 }}>{summary.projects_completed}</Typography></Box>
-                  </Stack>
-                </CardContent>
-              </Card>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <IndicatorCard
+                icon={<ScheduleIcon color="warning" />}
+                color="warning"
+                title="Retraso promedio"
+                value={deliveries?.average_delay_days != null ? pluralDays(deliveries.average_delay_days) : '—'}
+                detail={deliveries && deliveries.late > 0
+                  ? `Promedio de los ${deliveries.late} proyectos entregados tarde.`
+                  : 'Ningún proyecto entregado tarde en el período.'}
+              />
             </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Card sx={{ height: '100%', borderTop: 4, borderColor: 'warning.main' }}>
-                <CardContent>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <ScheduleIcon color="warning" />
-                    <Box>
-                      <Typography color="text.secondary" variant="body2">Entregas con retraso en {summary.year}</Typography>
-                      <Typography variant="h3" sx={{ fontWeight: 700 }}>
-                        {summary.deliveries?.late_percentage ?? '—'}{summary.deliveries?.late_percentage != null && '%'}
-                      </Typography>
-                      <Typography color="text.secondary" variant="caption" component="p">
-                        {summary.deliveries && summary.deliveries.with_commitment > 0
-                          ? `${summary.deliveries.late} de ${summary.deliveries.with_commitment} entregas. Compara la entrega real con la fecha comprometida; no incluye el cierre del cliente.`
-                          : 'Sin entregas con fecha comprometida este año.'}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </CardContent>
-              </Card>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <IndicatorCard
+                icon={<TaskAltIcon color="primary" />}
+                color="primary"
+                title={`Proyectos completados · ${summary.year}${typeLabel}`}
+                value={summary.projects_completed}
+                detail={`Objetivo 1.3 (denominador del índice de errores) · Creados en el año: ${summary.projects_created}.`}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <IndicatorCard
+                icon={<GroupsIcon color="info" />}
+                color="info"
+                title="Clientes recurrentes"
+                value={recurring?.count ?? '—'}
+                detail={recurring
+                  ? `Fidelización B2B · Clientes con más de ${recurring.min_projects - 1} proyectos iniciados en el año (de ${recurring.clients_with_projects} clientes con proyectos).`
+                  : undefined}
+              />
             </Grid>
           </Grid>
+
+          {recurring && recurring.clients.length > 0 && (
+            <Card>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                  <EventAvailableIcon color="info" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Clientes recurrentes</Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  {recurring.clients.map((client) => (
+                    <Chip key={client.id} label={`${client.name} · ${client.projects} proyectos`} variant="outlined" />
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>

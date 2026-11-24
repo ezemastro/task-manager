@@ -818,7 +818,20 @@ function calendarDurationDays(startedAt: string | null | undefined, endedAt: str
 }
 
 // Resumen anual de proyectos completados y actividad de la organización.
-apiRouter.get('/summary', (req: Request, res: Response) => {
+// Indicadores del Manual de Calidad, todos leídos del Resumen:
+// - Objetivo 1.1: % de proyectos entregados a tiempo en el año (entrega real
+//   vs. fecha comprometida; el cierre del cliente no cuenta).
+// - Días promedio de retraso de los entregados tarde.
+// - Objetivo 1.3 (denominador): proyectos completados en el año.
+// - Fidelización B2B: clientes con más de 2 proyectos iniciados en el año.
+// Filtros: año y, opcionalmente, tipo de trabajo (project_type).
+const RECURRING_CLIENT_MIN_PROJECTS = 3; // "más de 2 proyectos"
+
+const summaryDbAll = <T = any>(sql: string, params: unknown[]) => new Promise<T[]>((resolve, reject) => {
+  db.all(sql, params, (err, rows) => (err ? reject(err) : resolve((rows || []) as T[])));
+});
+
+apiRouter.get('/summary', async (req: Request, res: Response) => {
   const requestedYear = Number(req.query.year);
   const currentYear = Number(new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Argentina/Buenos_Aires',
@@ -827,6 +840,12 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
   const year = Number.isInteger(requestedYear) && requestedYear >= 1900 && requestedYear <= 3000
     ? requestedYear
     : currentYear;
+  const projectType = req.query.project_type;
+  if (projectType !== undefined && projectType !== '' && !isProjectType(projectType)) {
+    return res.status(400).json({ error: 'Tipo de proyecto inválido' });
+  }
+  const typeFilter = isProjectType(projectType) ? ' AND p.project_type = ?' : '';
+  const typeParams = isProjectType(projectType) ? [projectType] : [];
   const organizationId = req.user!.organizationId;
   const yearExpression = (column: string) => `CASE WHEN length(${column}) = 10 THEN substr(${column}, 1, 4) ELSE strftime('%Y', datetime(${column}, '-3 hours')) END`;
 
@@ -835,7 +854,7 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
       SUM(CASE WHEN ${yearExpression('p.created_at')} = ? THEN 1 ELSE 0 END) as created_count,
       SUM(CASE WHEN ${yearExpression('p.completed_date')} = ? THEN 1 ELSE 0 END) as completed_count
     FROM projects p
-    WHERE p.organization_id = ?
+    WHERE p.organization_id = ?${typeFilter}
   `;
   const stagesSql = `
     SELECT
@@ -859,7 +878,7 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
     FROM projects p
     INNER JOIN stages s ON s.project_id = p.id
     LEFT JOIN stage_cycles sc ON sc.stage_id = s.id AND sc.project_id = p.id
-    WHERE p.organization_id = ? AND ${yearExpression('p.completed_date')} = ?
+    WHERE p.organization_id = ? AND ${yearExpression('p.completed_date')} = ?${typeFilter}
     GROUP BY s.name
     ORDER BY MIN(s.order_number), s.name
   `;
@@ -870,72 +889,95 @@ apiRouter.get('/summary', (req: Request, res: Response) => {
       SELECT ${yearExpression('p.completed_date')} as year FROM projects p WHERE p.organization_id = ?
     ) WHERE year IS NOT NULL ORDER BY year DESC
   `;
-
   // Entregas del año: proyectos cuya etapa de entrega se completó en `year`.
   const deliveryStagesSql = `
     SELECT p.id as project_id, p.deadline, p.status, p.completed_date as project_completed_date,
            s.milestone, s.is_completed, s.completed_date
     FROM projects p
     INNER JOIN stages s ON s.project_id = p.id
-    WHERE p.organization_id = ?
+    WHERE p.organization_id = ?${typeFilter}
+  `;
+  // Clientes con proyectos iniciados (creados) en el año.
+  const clientsSql = `
+    SELECT c.id, c.name, COUNT(p.id) as projects
+    FROM projects p
+    INNER JOIN clients c ON c.id = p.client_id
+    WHERE p.organization_id = ? AND ${yearExpression('p.created_at')} = ?${typeFilter}
+    GROUP BY c.id, c.name
+    ORDER BY projects DESC, c.name
   `;
 
-  db.get(countsSql, [String(year), String(year), organizationId], (countsError, counts: any) => {
-    if (countsError) return res.status(500).json({ error: countsError.message });
-    db.all(stagesSql, [organizationId, String(year)], (stagesError, stages: any[]) => {
-      if (stagesError) return res.status(500).json({ error: stagesError.message });
-      db.all(deliveryStagesSql, [organizationId], (deliveryError, deliveryRows: any[]) => {
-        if (deliveryError) return res.status(500).json({ error: deliveryError.message });
-      db.all(yearsSql, [organizationId, organizationId], (yearsError, years: any[]) => {
-        if (yearsError) return res.status(500).json({ error: yearsError.message });
-        const byProject = new Map<number, { project: any; stages: DeliveryStageRow[] }>();
-        (deliveryRows || []).forEach((row) => {
-          const entry = byProject.get(row.project_id) ?? {
-            project: { deadline: row.deadline, status: row.status, completed_date: row.project_completed_date },
-            stages: [],
-          };
-          entry.stages.push({ milestone: row.milestone, is_completed: row.is_completed, completed_date: row.completed_date });
-          byProject.set(row.project_id, entry);
-        });
-        const deliveredThisYear = Array.from(byProject.values())
-          .map(({ project, stages: projectStages }) => computeDeliveryInfo(project, projectStages))
-          .filter((info) => info.delivered_date?.startsWith(`${year}-`));
-        const measured = deliveredThisYear.filter((info) => info.status === 'on_time' || info.status === 'late');
-        const lateDeliveries = measured.filter((info) => info.status === 'late');
-        const availableYears = Array.from(new Set([
-          currentYear,
-          ...(years || []).map((row) => Number(row.year)).filter((value) => Number.isInteger(value)),
-        ])).sort((a, b) => b - a);
-        res.json({
-          year,
-          available_years: availableYears,
-          projects_created: Number(counts?.created_count || 0),
-          projects_completed: Number(counts?.completed_count || 0),
-          stages: (stages || []).map((stage) => ({
-            stage_name: stage.stage_name,
-            total_days: Number(stage.total_days || 0),
-            delayed_cycles: Number(stage.delayed_cycles || 0),
-            counts_work_time: Boolean(stage.counts_work_time),
-            is_control: Boolean(stage.is_control),
-          })),
-          // Días de trabajo: solo las etapas que suman tiempo (excluye p. ej.
-          // la espera del cierre del cliente).
-          work_days: (stages || [])
-            .filter((stage) => stage.counts_work_time)
-            .reduce((sum, stage) => sum + Number(stage.total_days || 0), 0),
-          deliveries: {
-            delivered: deliveredThisYear.length,
-            with_commitment: measured.length,
-            late: lateDeliveries.length,
-            on_time: measured.length - lateDeliveries.length,
-            late_percentage: measured.length > 0 ? Math.round((lateDeliveries.length / measured.length) * 100) : null,
-            total_delay_days: lateDeliveries.reduce((sum, info) => sum + info.delay_days, 0),
-          },
-        });
-      });
-      });
+  try {
+    const [[counts], stages, deliveryRows, years, clients] = await Promise.all([
+      summaryDbAll(countsSql, [String(year), String(year), organizationId, ...typeParams]),
+      summaryDbAll(stagesSql, [organizationId, String(year), ...typeParams]),
+      summaryDbAll(deliveryStagesSql, [organizationId, ...typeParams]),
+      summaryDbAll(yearsSql, [organizationId, organizationId]),
+      summaryDbAll<{ id: number; name: string; projects: number }>(clientsSql, [organizationId, String(year), ...typeParams]),
+    ]);
+
+    const byProject = new Map<number, { project: any; stages: DeliveryStageRow[] }>();
+    deliveryRows.forEach((row) => {
+      const entry = byProject.get(row.project_id) ?? {
+        project: { deadline: row.deadline, status: row.status, completed_date: row.project_completed_date },
+        stages: [],
+      };
+      entry.stages.push({ milestone: row.milestone, is_completed: row.is_completed, completed_date: row.completed_date });
+      byProject.set(row.project_id, entry);
     });
-  });
+    const deliveredThisYear = Array.from(byProject.values())
+      .map(({ project, stages: projectStages }) => computeDeliveryInfo(project, projectStages))
+      .filter((info) => info.delivered_date?.startsWith(`${year}-`));
+    const measured = deliveredThisYear.filter((info) => info.status === 'on_time' || info.status === 'late');
+    const lateDeliveries = measured.filter((info) => info.status === 'late');
+    const totalDelayDays = lateDeliveries.reduce((sum, info) => sum + info.delay_days, 0);
+    const recurringClients = clients
+      .filter((client) => Number(client.projects) >= RECURRING_CLIENT_MIN_PROJECTS)
+      .map((client) => ({ id: client.id, name: client.name, projects: Number(client.projects) }));
+
+    const availableYears = Array.from(new Set([
+      currentYear,
+      ...years.map((row) => Number(row.year)).filter((value) => Number.isInteger(value)),
+    ])).sort((a, b) => b - a);
+
+    res.json({
+      year,
+      project_type: isProjectType(projectType) ? projectType : null,
+      available_years: availableYears,
+      projects_created: Number(counts?.created_count || 0),
+      projects_completed: Number(counts?.completed_count || 0),
+      stages: stages.map((stage) => ({
+        stage_name: stage.stage_name,
+        total_days: Number(stage.total_days || 0),
+        delayed_cycles: Number(stage.delayed_cycles || 0),
+        counts_work_time: Boolean(stage.counts_work_time),
+        is_control: Boolean(stage.is_control),
+      })),
+      // Días de trabajo: solo las etapas que suman tiempo (excluye p. ej.
+      // la espera del cierre del cliente).
+      work_days: stages
+        .filter((stage) => stage.counts_work_time)
+        .reduce((sum, stage) => sum + Number(stage.total_days || 0), 0),
+      deliveries: {
+        delivered: deliveredThisYear.length,
+        with_commitment: measured.length,
+        late: lateDeliveries.length,
+        on_time: measured.length - lateDeliveries.length,
+        on_time_percentage: measured.length > 0 ? Math.round(((measured.length - lateDeliveries.length) / measured.length) * 100) : null,
+        late_percentage: measured.length > 0 ? Math.round((lateDeliveries.length / measured.length) * 100) : null,
+        total_delay_days: totalDelayDays,
+        average_delay_days: lateDeliveries.length > 0 ? Math.round((totalDelayDays / lateDeliveries.length) * 10) / 10 : null,
+      },
+      recurring_clients: {
+        min_projects: RECURRING_CLIENT_MIN_PROJECTS,
+        count: recurringClients.length,
+        clients_with_projects: clients.length,
+        clients: recurringClients,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Error al calcular el resumen' });
+  }
 });
 
 // ==================== AUDIT LOGS ENDPOINTS ====================

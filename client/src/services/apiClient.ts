@@ -196,9 +196,19 @@ export interface ProjectSummary {
     with_commitment: number;
     late: number;
     on_time: number;
+    on_time_percentage?: number | null;
     late_percentage: number | null;
     total_delay_days: number;
+    average_delay_days?: number | null;
   };
+  /** Clientes con más de 2 proyectos iniciados en el año (fidelización B2B). */
+  recurring_clients?: {
+    min_projects: number;
+    count: number;
+    clients_with_projects: number;
+    clients: Array<{ id: number; name: string; projects: number }>;
+  };
+  project_type?: ProjectType | null;
 }
 
 // Retraso medido entre la fecha comprometida y la entrega real (etapa
@@ -491,8 +501,10 @@ class ApiClient {
     return data;
   }
 
-  async getProjectSummary(year: number): Promise<ProjectSummary> {
-    const { data } = await this.api.get<ProjectSummary>('/summary', { params: { year } });
+  async getProjectSummary(year: number, projectType?: ProjectType | null): Promise<ProjectSummary> {
+    const { data } = await this.api.get<ProjectSummary>('/summary', {
+      params: projectType ? { year, project_type: projectType } : { year },
+    });
     return data;
   }
 
