@@ -20,6 +20,7 @@ import StageInProgressCard from './StageInProgressCard';
 import DeadlineChip from './DeadlineChip';
 import { saveProjectReturnSnapshot, type ProjectReturnFilters } from '../utils/projectReturnSnapshot';
 import { getMissingProjectData } from '../utils/projectRequiredFields';
+import { getProjectTypeLabel } from '../utils/projectTypes';
 
 interface ProjectCardProps {
   projectId: number;
@@ -34,6 +35,7 @@ interface ProjectCardProps {
   onEditTags?: () => void;
   dashboardLocationKey?: string;
   filters?: ProjectReturnFilters;
+  projectType?: string | null;
   /** Mostrar el aviso "Faltan datos" si falta cliente, responsable o fecha límite. */
   showMissingDataWarning?: boolean;
 }
@@ -51,7 +53,9 @@ export default function ProjectCard({
   filters,
   onEditTags,
   showMissingDataWarning = true,
+  projectType,
 }: ProjectCardProps) {
+  const projectTypeLabel = getProjectTypeLabel(projectType);
   const missingData = showMissingDataWarning
     ? getMissingProjectData({ clientName, responsibleName, deadline })
     : [];
@@ -126,6 +130,9 @@ export default function ProjectCard({
             
             {/* Metadata inline */}
             <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+              {projectTypeLabel && (
+                <Chip label={projectTypeLabel} size="small" color="primary" variant="outlined" sx={{ flexShrink: 0 }} />
+              )}
               {missingData.length > 0 && (
                 <Tooltip title={`Completá: ${missingData.join(', ')}`}>
                   <Chip

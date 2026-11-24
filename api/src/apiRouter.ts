@@ -25,6 +25,63 @@ function addBusinessDays(from: Date, days: number): Date {
   return result;
 }
 
+// Tipos de proyecto. Cada tipo tiene su propia lista de etapas predefinidas
+// (stage_templates.project_type) que se copian al crear un proyecto de ese tipo.
+export const PROJECT_TYPES = ['obra_nueva', 'carteles', 'reforma'] as const;
+export type ProjectType = typeof PROJECT_TYPES[number];
+const LEGACY_TEMPLATES_PROJECT_TYPE: ProjectType = 'obra_nueva';
+
+function isProjectType(value: unknown): value is ProjectType {
+  return typeof value === 'string' && (PROJECT_TYPES as readonly string[]).includes(value);
+}
+
+// Agrega la columna project_type a projects y stage_templates si falta.
+// Las plantillas anteriores a los tipos (project_type NULL) quedan para
+// "obra nueva" y se copian a los demás tipos, para que cada tipo arranque con
+// la misma lista y se pueda organizar por separado. Es idempotente: una vez
+// asignado el tipo, no quedan plantillas en NULL para volver a copiar.
+function ensureProjectTypeColumns() {
+  const addColumnIfMissing = (table: string, done: () => void) => {
+    db.all(`PRAGMA table_info(${table})`, (err, columns: Array<{ name: string }>) => {
+      if (err) {
+        console.error(`Error al verificar project_type en ${table}:`, err.message);
+        return;
+      }
+      if (columns.some((column) => column.name === 'project_type')) return done();
+      db.run(`ALTER TABLE ${table} ADD COLUMN project_type TEXT`, (alterErr) => {
+        if (alterErr) {
+          console.error(`Error al agregar project_type a ${table}:`, alterErr.message);
+          return;
+        }
+        done();
+      });
+    });
+  };
+
+  addColumnIfMissing('projects', () => {});
+  addColumnIfMissing('stage_templates', () => {
+    const copyLegacy = PROJECT_TYPES
+      .filter((type) => type !== LEGACY_TEMPLATES_PROJECT_TYPE)
+      .map((type) => `
+        INSERT INTO stage_templates (organization_id, name, order_number, default_responsible_id, estimated_duration_days, project_type)
+        SELECT organization_id, name, order_number, default_responsible_id, estimated_duration_days, '${type}'
+        FROM stage_templates WHERE project_type IS NULL;`)
+      .join('\n');
+    db.exec(
+      `BEGIN;
+       ${copyLegacy}
+       UPDATE stage_templates SET project_type = '${LEGACY_TEMPLATES_PROJECT_TYPE}' WHERE project_type IS NULL;
+       COMMIT;`,
+      (execErr) => {
+        if (execErr) {
+          console.error('Error al asignar tipo a las etapas predefinidas:', execErr.message);
+          db.exec('ROLLBACK', () => {});
+        }
+      }
+    );
+  });
+}
+
 // Email del super administrador global (dueño de la plataforma).
 const SUPER_ADMIN_EMAIL = 'marcelomastropietro@gmail.com';
 
@@ -222,6 +279,9 @@ function initializeDatabase() {
         FOREIGN KEY (default_responsible_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+
+    // Tipo de proyecto (obra nueva / carteles / reforma) en proyectos y plantillas.
+    ensureProjectTypeColumns();
 
     // Tabla de etapas
     db.run(`
@@ -839,15 +899,21 @@ apiRouter.delete('/clients/:id', (req: Request, res: Response) => {
 // GET all stage templates
 apiRouter.get('/stage-templates', (req: Request, res: Response) => {
   const organizationId = req.user!.organizationId;
+  const { project_type } = req.query;
+  if (project_type !== undefined && !isProjectType(project_type)) {
+    res.status(400).json({ error: 'Tipo de proyecto inválido' });
+    return;
+  }
   const sql = `
-    SELECT st.*, u.name as default_responsible_name 
+    SELECT st.*, u.name as default_responsible_name
     FROM stage_templates st
     LEFT JOIN users u ON st.default_responsible_id = u.id
-    WHERE st.organization_id = ?
+    WHERE st.organization_id = ?${project_type ? ' AND st.project_type = ?' : ''}
     ORDER BY st.order_number
   `;
-  
-  db.all(sql, [organizationId], (err, rows) => {
+  const params: any[] = project_type ? [organizationId, project_type] : [organizationId];
+
+  db.all(sql, params, (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
@@ -881,28 +947,33 @@ apiRouter.get('/stage-templates/:id', (req: Request, res: Response) => {
 
 // POST create stage template
 apiRouter.post('/stage-templates', (req: Request, res: Response) => {
-  const { name, order_number, default_responsible_id, estimated_duration_days } = req.body;
+  const { name, order_number, default_responsible_id, estimated_duration_days, project_type } = req.body;
   const organizationId = req.user!.organizationId;
-  
+
   if (!name || order_number === undefined) {
     res.status(400).json({ error: 'El nombre y el orden son requeridos' });
     return;
   }
+  if (!isProjectType(project_type)) {
+    res.status(400).json({ error: 'El tipo de proyecto es requerido (obra_nueva, carteles o reforma)' });
+    return;
+  }
 
   db.run(
-    'INSERT INTO stage_templates (organization_id, name, order_number, default_responsible_id, estimated_duration_days) VALUES (?, ?, ?, ?, ?)',
-    [organizationId, name, order_number, default_responsible_id || null, estimated_duration_days || null],
+    'INSERT INTO stage_templates (organization_id, name, order_number, default_responsible_id, estimated_duration_days, project_type) VALUES (?, ?, ?, ?, ?, ?)',
+    [organizationId, name, order_number, default_responsible_id || null, estimated_duration_days || null, project_type],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.status(201).json({ 
-        id: this.lastID, 
-        name, 
-        order_number, 
-        default_responsible_id, 
-        estimated_duration_days 
+      res.status(201).json({
+        id: this.lastID,
+        name,
+        order_number,
+        default_responsible_id,
+        estimated_duration_days,
+        project_type,
       });
     }
   );
@@ -1016,16 +1087,19 @@ apiRouter.delete('/stage-templates/:id', (req: Request, res: Response) => {
 
 // Crear un nuevo proyecto
 apiRouter.post('/projects', (req: Request, res: Response) => {
-  const { name, description, contact, client_id, responsible_id, deadline } = req.body;
+  const { name, description, contact, client_id, responsible_id, deadline, project_type } = req.body;
   const organizationId = req.user!.organizationId;
 
   if (!name) {
     return res.status(400).json({ error: 'El nombre del proyecto es requerido' });
   }
+  if (!isProjectType(project_type)) {
+    return res.status(400).json({ error: 'El tipo de proyecto es requerido (obra_nueva, carteles o reforma)' });
+  }
 
   const normalizedContact = typeof contact === 'string' ? contact.trim() || null : null;
-  const sql = 'INSERT INTO projects (organization_id, name, description, contact, client_id, responsible_id, deadline) VALUES (?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [organizationId, name, description || null, normalizedContact, client_id || null, responsible_id || null, deadline || null], function (err) {
+  const sql = 'INSERT INTO projects (organization_id, name, description, contact, client_id, responsible_id, deadline, project_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [organizationId, name, description || null, normalizedContact, client_id || null, responsible_id || null, deadline || null, project_type], function (err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1041,7 +1115,7 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
         entityType: 'project',
         entityId: projectId,
         projectName: name,
-        details: JSON.stringify({ name, description, contact: normalizedContact, client_id, responsible_id, deadline }),
+        details: JSON.stringify({ name, description, contact: normalizedContact, client_id, responsible_id, deadline, project_type }),
         ipAddress: req.ip
       });
 
@@ -1052,11 +1126,13 @@ apiRouter.post('/projects', (req: Request, res: Response) => {
         contact: normalizedContact,
         client_id,
         deadline,
+        project_type,
         message: 'Proyecto creado exitosamente'
       });
     };
 
-    db.all('SELECT * FROM stage_templates WHERE organization_id = ? ORDER BY order_number', [organizationId], (err, templates: any[]) => {
+    // Solo las etapas predefinidas del tipo de este proyecto.
+    db.all('SELECT * FROM stage_templates WHERE organization_id = ? AND project_type = ? ORDER BY order_number', [organizationId, project_type], (err, templates: any[]) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
@@ -1328,8 +1404,12 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, contact, status, client_id, responsible_id, deadline } = req.body;
+  const { name, description, contact, status, client_id, responsible_id, deadline, project_type } = req.body;
   const organizationId = req.user!.organizationId;
+
+  if (project_type !== undefined && !isProjectType(project_type)) {
+    return res.status(400).json({ error: 'Tipo de proyecto inválido (obra_nueva, carteles o reforma)' });
+  }
 
   db.get('SELECT status, completed_date FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (lookupError, existingProject: any) => {
     if (lookupError) return res.status(500).json({ error: lookupError.message });
@@ -1374,6 +1454,11 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
       updates.push('deadline = ?');
       values.push(deadline);
     }
+    // Cambiar el tipo no modifica las etapas que el proyecto ya tiene.
+    if (project_type !== undefined) {
+      updates.push('project_type = ?');
+      values.push(project_type);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No hay campos para actualizar' });
@@ -1398,7 +1483,7 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
         entityType: 'project',
         entityId: Number(id),
         projectName: projectName,
-          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline }),
+          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline, project_type }),
         ipAddress: req.ip
       });
       });

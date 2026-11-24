@@ -22,6 +22,8 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -31,8 +33,11 @@ import {
   ArrowDownward as ArrowDownIcon,
 } from '@mui/icons-material';
 import { apiClient, type StageTemplate, type User } from '../services/apiClient';
+import { PROJECT_TYPES, PROJECT_TYPE_LABELS, type ProjectType } from '../utils/projectTypes';
 
 export default function StageTemplatesManagement() {
+  // Cada tipo de proyecto tiene su propia lista de etapas predefinidas.
+  const [projectType, setProjectType] = useState<ProjectType>('obra_nueva');
   const [templates, setTemplates] = useState<StageTemplate[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,10 +52,10 @@ export default function StageTemplatesManagement() {
     estimated_duration_days: '',
   });
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (type: ProjectType = projectType) => {
     try {
       setLoading(true);
-      const data = await apiClient.getStageTemplates();
+      const data = await apiClient.getStageTemplates(type);
       setTemplates(data);
       setError(null);
     } catch (err) {
@@ -70,9 +75,14 @@ export default function StageTemplatesManagement() {
   };
 
   useEffect(() => {
-    fetchTemplates();
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    setTemplates([]);
+    fetchTemplates(projectType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectType]);
 
   const handleOpenCreate = () => {
     setSelectedTemplate(null);
@@ -113,7 +123,7 @@ export default function StageTemplatesManagement() {
       if (selectedTemplate) {
         await apiClient.updateStageTemplate(selectedTemplate.id, data);
       } else {
-        await apiClient.createStageTemplate(data);
+        await apiClient.createStageTemplate({ ...data, project_type: projectType });
       }
       
       setDialogOpen(false);
@@ -188,6 +198,18 @@ export default function StageTemplatesManagement() {
         </Button>
       </Box>
 
+      <Tabs
+        value={projectType}
+        onChange={(_, value: ProjectType) => setProjectType(value)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+        variant="scrollable"
+        allowScrollButtonsMobile
+      >
+        {PROJECT_TYPES.map((type) => (
+          <Tab key={type} value={type} label={PROJECT_TYPE_LABELS[type]} />
+        ))}
+      </Tabs>
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
@@ -195,7 +217,7 @@ export default function StageTemplatesManagement() {
       )}
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        Estas plantillas se duplicarán automáticamente al crear nuevos proyectos. 
+        Estas etapas se copiarán automáticamente al crear un proyecto de tipo <strong>{PROJECT_TYPE_LABELS[projectType]}</strong>.
         Al completar una etapa, la siguiente se creará automáticamente según este orden.
       </Alert>
 
@@ -220,7 +242,7 @@ export default function StageTemplatesManagement() {
             ) : templates.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center">
-                  No hay plantillas de etapas. Crea la primera para que los proyectos se generen automáticamente con etapas.
+                  No hay etapas predefinidas para {PROJECT_TYPE_LABELS[projectType]}. Crea la primera para que estos proyectos se generen automáticamente con etapas.
                 </TableCell>
               </TableRow>
             ) : (
@@ -261,7 +283,9 @@ export default function StageTemplatesManagement() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{selectedTemplate ? 'Editar' : 'Crear'} Plantilla de Etapa</DialogTitle>
+        <DialogTitle>
+          {selectedTemplate ? 'Editar' : 'Crear'} Plantilla de Etapa · {PROJECT_TYPE_LABELS[projectType]}
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField

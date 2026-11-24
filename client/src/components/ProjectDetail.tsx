@@ -32,6 +32,7 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import { apiClient, type Project, type Stage } from '../services/apiClient';
 import { formatLocalDate } from '../utils/dateUtils';
 import { getMissingProjectData } from '../utils/projectRequiredFields';
+import { getProjectTypeLabel } from '../utils/projectTypes';
 import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
@@ -382,6 +383,12 @@ export default function ProjectDetail() {
           </Typography>
 
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+            <Chip
+              label={getProjectTypeLabel(project.project_type) ?? 'Sin tipo'}
+              size="small"
+              color={project.project_type ? 'primary' : 'default'}
+              variant="outlined"
+            />
             {(project.tags ?? []).map((tag) => (
               <Chip
                 key={tag.id}
@@ -570,6 +577,7 @@ export default function ProjectDetail() {
           client_id: project.client_id,
           responsible_id: project.responsible_id,
           deadline: project.deadline,
+          project_type: project.project_type,
         }}
       />
 

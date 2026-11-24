@@ -23,8 +23,9 @@ import CreateClientModal from './CreateClientModal';
 import MissingFieldWarning from './MissingFieldWarning';
 import { dateStringToLocalISO } from '../utils/dateUtils';
 import { getMissingFieldWarnings } from '../utils/projectRequiredFields';
+import { PROJECT_TYPES, PROJECT_TYPE_LABELS, type ProjectType } from '../utils/projectTypes';
 
-type FormErrors = { name?: string; description?: string };
+type FormErrors = { name?: string; description?: string; project_type?: string };
 
 interface CreateProjectModalProps {
   open: boolean;
@@ -82,6 +83,10 @@ export default function CreateProjectModal({
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
+
+    if (!formData.project_type) {
+      newErrors.project_type = 'Elegí el tipo de proyecto';
+    }
 
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre del proyecto es requerido';
@@ -164,7 +169,8 @@ export default function CreateProjectModal({
   const handleClose = () => {
     if (!loading) {
       // Verificar si hay cambios sin guardar
-      const hasChanges = formData.name.trim() !== '' || 
+      const hasChanges = formData.name.trim() !== '' ||
+                         formData.project_type !== undefined ||
                          formData.description?.trim() !== '' || 
                          formData.contact?.trim() !== '' ||
                          formData.client_id !== undefined || 
@@ -199,6 +205,28 @@ export default function CreateProjectModal({
 
       <DialogContent>
         <Box>
+          <FormControl fullWidth margin="normal" required error={!!errors.project_type}>
+            <InputLabel>Tipo de proyecto</InputLabel>
+            <Select
+              value={formData.project_type || ''}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, project_type: (e.target.value || undefined) as ProjectType | undefined }));
+                setErrors((prev) => ({ ...prev, project_type: undefined }));
+              }}
+              label="Tipo de proyecto"
+              disabled={loading}
+            >
+              {PROJECT_TYPES.map((type) => (
+                <MenuItem key={type} value={type}>
+                  {PROJECT_TYPE_LABELS[type]}
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>
+              {errors.project_type || 'Define qué etapas predefinidas se crean en el proyecto'}
+            </FormHelperText>
+          </FormControl>
+
           <FormControl fullWidth margin="normal">
             <InputLabel>Cliente</InputLabel>
             <Select

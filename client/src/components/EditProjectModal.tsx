@@ -19,6 +19,7 @@ import { apiClient, type Client, type User } from '../services/apiClient';
 import { dateStringToLocalISO, isoToDateString } from '../utils/dateUtils';
 import { getMissingFieldWarnings } from '../utils/projectRequiredFields';
 import MissingFieldWarning from './MissingFieldWarning';
+import { PROJECT_TYPES, PROJECT_TYPE_LABELS, type ProjectType } from '../utils/projectTypes';
 
 type FormErrors = { name?: string; description?: string };
 
@@ -34,6 +35,7 @@ interface EditProjectModalProps {
     client_id?: number;
     responsible_id?: number;
     deadline?: string;
+    project_type?: ProjectType | null;
   };
 }
 
@@ -44,13 +46,22 @@ export default function EditProjectModal({
   projectId,
   initialData,
 }: EditProjectModalProps) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    contact: string;
+    client_id?: number;
+    responsible_id?: number;
+    deadline: string;
+    project_type: ProjectType | '';
+  }>({
     name: initialData.name,
     description: initialData.description || '',
     contact: initialData.contact || '',
     client_id: initialData.client_id,
     responsible_id: initialData.responsible_id,
     deadline: isoToDateString(initialData.deadline),
+    project_type: initialData.project_type || '',
   });
   
   const [clients, setClients] = useState<Client[]>([]);
@@ -70,6 +81,7 @@ export default function EditProjectModal({
         client_id: initialData.client_id,
         responsible_id: initialData.responsible_id,
         deadline: isoToDateString(initialData.deadline),
+        project_type: initialData.project_type || '',
       });
       fetchClients();
       fetchUsers();
@@ -129,6 +141,7 @@ export default function EditProjectModal({
         client_id: formData.client_id || undefined,
         responsible_id: formData.responsible_id || undefined,
         deadline: formData.deadline ? dateStringToLocalISO(formData.deadline) : null,
+        project_type: formData.project_type || undefined,
       });
 
       if (onSuccess) {
@@ -148,6 +161,7 @@ export default function EditProjectModal({
       // Verificar si hay cambios sin guardar comparando con initialData
       const hasChanges = 
         formData.name !== initialData.name ||
+        formData.project_type !== (initialData.project_type || '') ||
         formData.description !== (initialData.description || '') ||
         formData.contact !== (initialData.contact || '') ||
         formData.client_id !== initialData.client_id ||
@@ -180,6 +194,28 @@ export default function EditProjectModal({
 
       <DialogContent>
         <Box>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Tipo de proyecto</InputLabel>
+            <Select
+              value={formData.project_type}
+              onChange={(e) => setFormData({ ...formData, project_type: e.target.value as ProjectType | '' })}
+              label="Tipo de proyecto"
+              disabled={loading}
+            >
+              {!initialData.project_type && (
+                <MenuItem value="">
+                  <em>Sin tipo</em>
+                </MenuItem>
+              )}
+              {PROJECT_TYPES.map((type) => (
+                <MenuItem key={type} value={type}>
+                  {PROJECT_TYPE_LABELS[type]}
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>Cambiar el tipo no modifica las etapas que el proyecto ya tiene</FormHelperText>
+          </FormControl>
+
           <FormControl fullWidth margin="normal">
             <InputLabel>Cliente</InputLabel>
             <Select

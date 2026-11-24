@@ -388,7 +388,7 @@ async function execListReferenceData(args: Record<string, unknown>, ctx: ToolCon
   }
   if (requested.includes('stage_templates')) {
     const rows = await dbAll(
-      'SELECT id, name, order_number FROM stage_templates WHERE organization_id = ? ORDER BY order_number LIMIT ?',
+      'SELECT id, name, order_number, project_type FROM stage_templates WHERE organization_id = ? ORDER BY project_type, order_number LIMIT ?',
       [organizationId, name ? SEARCH_SCAN_CAP : ROW_CAP]
     );
     data.stage_templates = name
@@ -616,7 +616,7 @@ async function callInternal(
 }
 
 async function execCreateProject(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const { name, description, deadline } = args;
+  const { name, description, deadline, project_type } = args;
   const clientId = typeof args.client_id === 'number' ? args.client_id : undefined;
   const responsibleId = typeof args.responsible_id === 'number' ? args.responsible_id : undefined;
 
@@ -637,6 +637,7 @@ async function execCreateProject(args: Record<string, unknown>, ctx: ToolContext
       client_id: clientId,
       responsible_id: responsibleId,
       deadline,
+      project_type,
     },
     { toolName: 'create_project' }
   );

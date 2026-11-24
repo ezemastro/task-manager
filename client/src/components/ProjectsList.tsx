@@ -603,6 +603,7 @@ export default function ProjectsList() {
               clientName={project.client_name}
               responsibleName={project.responsible_name}
               deadline={project.deadline}
+              projectType={project.project_type}
               stages={project.stages}
               tags={project.tags}
               dashboardLocationKey={location.key}

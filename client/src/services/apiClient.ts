@@ -1,3 +1,5 @@
+import type { ProjectType } from '../utils/projectTypes';
+
 // ==================== TYPES & INTERFACES ====================
 
 export interface User {
@@ -22,6 +24,7 @@ export interface StageTemplate {
   default_responsible_id?: number;
   default_responsible_name?: string;
   estimated_duration_days?: number;
+  project_type?: ProjectType | null;
   created_at: string;
 }
 
@@ -37,6 +40,7 @@ export interface Project {
   responsible_id?: number;
   responsible_name?: string;
   deadline?: string;
+  project_type?: ProjectType | null;
   created_at: string;
   updated_at: string;
   total_stages?: number;
@@ -149,6 +153,7 @@ export interface Comment {
 // Request DTOs
 export interface CreateProjectRequest {
   name: string;
+  project_type?: ProjectType;
   description?: string;
   contact?: string;
   client_id?: number;
@@ -158,6 +163,7 @@ export interface CreateProjectRequest {
 
 export interface UpdateProjectRequest {
   name?: string;
+  project_type?: ProjectType;
   description?: string;
   contact?: string | null;
   status?: string;
@@ -686,8 +692,10 @@ class ApiClient {
 
   // ==================== STAGE TEMPLATES ====================
 
-  async getStageTemplates(): Promise<StageTemplate[]> {
-    const { data } = await this.api.get<StageTemplate[]>('/stage-templates');
+  async getStageTemplates(projectType?: ProjectType): Promise<StageTemplate[]> {
+    const { data } = await this.api.get<StageTemplate[]>('/stage-templates', {
+      params: projectType ? { project_type: projectType } : undefined,
+    });
     return data;
   }
 
@@ -701,6 +709,7 @@ class ApiClient {
     order_number: number;
     default_responsible_id?: number | null;
     estimated_duration_days?: number | null;
+    project_type: ProjectType;
   }): Promise<StageTemplate & { message: string }> {
     const { data } = await this.api.post(`/stage-templates`, requestData);
     return data;

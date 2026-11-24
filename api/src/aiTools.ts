@@ -44,6 +44,7 @@ export const REFERENCE_DATA_ENTITY_TYPES = ['clients', 'users', 'tags', 'stage_t
 export type ReferenceDataEntityType = (typeof REFERENCE_DATA_ENTITY_TYPES)[number];
 
 export const PROJECT_STATUS_VALUES = ['active', 'paused', 'completed'] as const;
+export const PROJECT_TYPE_VALUES = ['obra_nueva', 'carteles', 'reforma'] as const;
 export const STAGE_STATE_ACTIONS = ['start', 'unstart', 'complete', 'uncomplete'] as const;
 export const STAGE_CYCLE_ACTIONS = ['start', 'finish'] as const;
 export const STAGE_TAG_ACTIONS = ['add', 'remove'] as const;
@@ -179,6 +180,7 @@ export const readTools: AiToolDefinition[] = [
 
 const createProjectSchema: ToolSchema = {
   name: { kind: 'string', required: true, maxLength: 200 },
+  project_type: { kind: 'enum', required: true, values: PROJECT_TYPE_VALUES },
   description: { kind: 'string', required: false, maxLength: 2000 },
   client_id: { kind: 'int', required: false, min: 1 },
   responsible_id: { kind: 'int', required: false, min: 1 },
@@ -232,7 +234,7 @@ export const writeTools: AiToolDefinition[] = [
     class: 'write',
     schema: createProjectSchema,
     summary:
-      'create_project(name:string, description?:string, client_id?:int, responsible_id?:int, deadline?:date) — creates a project in your organization',
+      'create_project(name:string, project_type:obra_nueva|carteles|reforma, description?:string, client_id?:int, responsible_id?:int, deadline?:date) — creates a project in your organization; project_type (obra nueva / carteles / reforma) picks which predefined stages it gets, ask the user if unclear',
     resourceHints: ['projects'],
   },
   {
