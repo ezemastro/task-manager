@@ -13,6 +13,7 @@ import {
   IconButton,
   Divider,
   Paper,
+  Tooltip,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LabelIcon from '@mui/icons-material/Label';
@@ -78,6 +79,17 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
     try { await apiClient.finishStageCycle(stage.id, openCycle.id); await fetchCycles(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Error al cerrar ciclo'); }
     finally { setCycleLoading(false); onLifecycleLoadingChange?.(false); }
+  };
+
+  const handleUndoNotApplicable = async () => {
+    if (!window.confirm(`¿Quitar "No aplica" de "${stage.name}"? Volverá a quedar pendiente.`)) return;
+    setError('');
+    try {
+      await apiClient.undoStageNotApplicable(stage.id);
+      if (onCompleted) onCompleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo quitar "No aplica"');
+    }
   };
 
   const handleComplete = async () => {
@@ -185,15 +197,29 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
             </Typography>
           </Box>
 
-          <Box>
+          <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap justifyContent="flex-end">
+            {Boolean(stage.is_required) && (
+              <Chip label="Obligatoria" color="warning" variant="outlined" size="small" />
+            )}
             {stage.is_completed ? (
               <Chip label="Completada" color="success" size="small" />
+            ) : stage.not_applicable ? (
+              <Tooltip
+                title={`Motivo: ${stage.not_applicable_reason ?? '—'} · Decidió: ${stage.not_applicable_by_name ?? 'desconocido'}${stage.not_applicable_at ? ` · ${formatLocalDateTime(stage.not_applicable_at)}` : ''}`}
+              >
+                <Chip
+                  label="No aplica"
+                  color="default"
+                  size="small"
+                  onDelete={handleUndoNotApplicable}
+                />
+              </Tooltip>
             ) : isCurrentStage ? (
               <Chip label="En Curso" color="primary" size="small" />
             ) : (
               <Chip label="Pendiente" color="default" size="small" />
             )}
-          </Box>
+          </Stack>
         </Box>
 
         {/* Fechas */}

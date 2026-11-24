@@ -529,6 +529,17 @@ class ApiClient {
     return data;
   }
 
+  /** Marca la etapa como "No aplica" (motivo obligatorio; se registra el usuario). */
+  async markStageNotApplicable(id: number, reason: string): Promise<{ message: string }> {
+    const { data } = await this.api.put(`/stages/${id}/not-applicable`, { reason });
+    return data;
+  }
+
+  async undoStageNotApplicable(id: number): Promise<{ message: string }> {
+    const { data } = await this.api.delete(`/stages/${id}/not-applicable`);
+    return data;
+  }
+
   async startStage(id: number): Promise<{ message: string }> {
     const { data } = await this.api.put(`/stages/${id}/start`);
     return data;

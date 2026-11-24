@@ -38,6 +38,8 @@ import CreateStageModal from './CreateStageModal';
 import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
 import DeliveryDatesPanel from './DeliveryDatesPanel';
+import RequiredStagesDialog from './RequiredStagesDialog';
+import { isPendingRequired } from '../utils/stageAttributes';
 import ProjectTagsDialog from './ProjectTagsDialog';
 import { clearProjectReturnSnapshot } from '../utils/projectReturnSnapshot';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
@@ -57,6 +59,7 @@ export default function ProjectDetail() {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
+  const [showRequiredDialog, setShowRequiredDialog] = useState(false);
   const [deletingStage, setDeletingStage] = useState(false);
   const [stageLifecycleLoading, setStageLifecycleLoading] = useState(false);
   
@@ -92,12 +95,24 @@ export default function ProjectDetail() {
     navigate(-1);
   };
 
+  // Etapas obligatorias abiertas: impiden completar el proyecto.
+  const pendingRequiredStages = stages.filter(isPendingRequired);
+
+  const completeProject = async () => {
+    if (!id) return;
+    await apiClient.updateProject(Number(id), { status: 'completed' });
+    setShowRequiredDialog(false);
+    await fetchProjectDetail();
+  };
+
   const handleCompleteProject = async () => {
     if (!id || !project) return;
-    
+    if (pendingRequiredStages.length > 0) {
+      setShowRequiredDialog(true);
+      return;
+    }
     try {
-      await apiClient.updateProject(Number(id), { status: 'completed' });
-      await fetchProjectDetail();
+      await completeProject();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al completar proyecto';
       setError(message);
@@ -559,6 +574,14 @@ export default function ProjectDetail() {
         onClose={() => setShowCreateStageModal(false)}
         onSuccess={handleStageCreated}
         projectId={Number(id)}
+      />
+
+      <RequiredStagesDialog
+        open={showRequiredDialog}
+        pendingStages={pendingRequiredStages}
+        onClose={() => setShowRequiredDialog(false)}
+        onStageResolved={() => fetchProjectDetail(true)}
+        onCompleteProject={completeProject}
       />
 
       <EditProjectModal

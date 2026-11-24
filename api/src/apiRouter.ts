@@ -111,7 +111,34 @@ const STAGE_ATTRIBUTE_COLUMNS = [
   ['counts_work_time', 'INTEGER NOT NULL DEFAULT 1'],
 ] as const;
 
+// "No aplica": una etapa (típicamente obligatoria) que no corresponde a un
+// trabajo puntual se resuelve con un motivo escrito y queda registrado quién
+// y cuándo lo decidió. Cuenta como resuelta para poder completar el proyecto.
+const NOT_APPLICABLE_COLUMNS = [
+  ['not_applicable', 'INTEGER NOT NULL DEFAULT 0'],
+  ['not_applicable_reason', 'TEXT'],
+  ['not_applicable_by', 'INTEGER'],
+  ['not_applicable_at', 'DATETIME'],
+] as const;
+
+function ensureNotApplicableColumns() {
+  db.all('PRAGMA table_info(stages)', (err, columns: Array<{ name: string }>) => {
+    if (err) {
+      console.error('Error al verificar columnas de "No aplica" en stages:', err.message);
+      return;
+    }
+    NOT_APPLICABLE_COLUMNS
+      .filter(([name]) => !columns.some((column) => column.name === name))
+      .forEach(([name, type]) => {
+        db.run(`ALTER TABLE stages ADD COLUMN ${name} ${type}`, (alterErr) => {
+          if (alterErr) console.error(`Error al agregar ${name} a stages:`, alterErr.message);
+        });
+      });
+  });
+}
+
 function ensureStageAttributeColumns() {
+  ensureNotApplicableColumns();
   ['stage_templates', 'stages'].forEach((table) => {
     db.all(`PRAGMA table_info(${table})`, (err, columns: Array<{ name: string }>) => {
       if (err) {
@@ -1319,10 +1346,26 @@ apiRouter.put('/stage-templates/:id', (req: Request, res: Response) => {
         }
         res.json(row);
       });
-      if (!attributes.values.milestone) return respond();
-      clearMilestoneFromOtherTemplates(Number(id), (clearErr) => {
-        if (clearErr) return res.status(500).json({ error: clearErr.message });
-        respond();
+      // "Obligatoria" también rige para los proyectos en curso (no completados)
+      // que tienen esta etapa; los completados quedan como estaban.
+      const propagateRequired = (next: () => void) => {
+        if (attributes.values.is_required === undefined) return next();
+        db.run(
+          `UPDATE stages SET is_required = ?
+           WHERE template_id = ? AND project_id IN (SELECT id FROM projects WHERE organization_id = ? AND status != 'completed')`,
+          [attributes.values.is_required, id, req.user!.organizationId],
+          (propagateErr) => {
+            if (propagateErr) return res.status(500).json({ error: propagateErr.message });
+            next();
+          }
+        );
+      };
+      propagateRequired(() => {
+        if (!attributes.values.milestone) return respond();
+        clearMilestoneFromOtherTemplates(Number(id), (clearErr) => {
+          if (clearErr) return res.status(500).json({ error: clearErr.message });
+          respond();
+        });
       });
     }
   );
@@ -1571,11 +1614,13 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
         c.name as client_name,
         u.name as responsible_name,
         u.account_email as responsible_email,
-        u.role as responsible_role
+        u.role as responsible_role,
+        nau.name as not_applicable_by_name
       FROM stages s
       INNER JOIN projects p ON s.project_id = p.id
       LEFT JOIN clients c ON p.client_id = c.id
       LEFT JOIN users u ON s.responsible_id = u.id
+      LEFT JOIN users nau ON s.not_applicable_by = nau.id
       WHERE s.project_id = ?
       ORDER BY s.order_number
     `;
@@ -1678,7 +1723,30 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Tipo de proyecto inválido (obra_nueva, carteles o reforma)' });
   }
 
-  db.get('SELECT status, completed_date FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (lookupError, existingProject: any) => {
+  // No se puede completar un proyecto con etapas obligatorias pendientes
+  // (ni completadas ni marcadas "No aplica"). Aplica a la pantalla y al asistente.
+  const ensureRequiredStagesResolved = (next: () => void) => {
+    if (status !== 'completed') return next();
+    const pendingSql = `
+      SELECT s.id, s.name FROM stages s
+      INNER JOIN projects p ON s.project_id = p.id
+      WHERE s.project_id = ? AND p.organization_id = ? AND p.status != 'completed'
+        AND s.is_required = 1 AND COALESCE(s.is_completed, 0) = 0 AND COALESCE(s.not_applicable, 0) = 0
+      ORDER BY s.order_number
+    `;
+    db.all(pendingSql, [id, organizationId], (pendingErr, pending: Array<{ id: number; name: string }>) => {
+      if (pendingErr) return res.status(500).json({ error: pendingErr.message });
+      if (pending.length > 0) {
+        return res.status(409).json({
+          error: `No se puede completar el proyecto: hay etapas obligatorias pendientes (${pending.map((s) => s.name).join(', ')}). Completalas o marcalas como "No aplica" con un motivo.`,
+          pending_required_stages: pending,
+        });
+      }
+      next();
+    });
+  };
+
+  ensureRequiredStagesResolved(() => db.get('SELECT status, completed_date FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (lookupError, existingProject: any) => {
     if (lookupError) return res.status(500).json({ error: lookupError.message });
     if (!existingProject) return res.status(404).json({ error: 'Proyecto no encontrado' });
 
@@ -1756,7 +1824,7 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
       });
       res.json({ message: 'Proyecto actualizado exitosamente' });
     });
-  });
+  }));
 });
 
 // Eliminar un proyecto
@@ -2039,7 +2107,7 @@ function completeStageAndCloseCycle(stageId: number, organizationId: number, use
             });
           };
           finishCycle(() => {
-            db.run('UPDATE stages SET is_completed = 1, completed_date = CURRENT_TIMESTAMP WHERE id = ?', [stageId], (completeErr) => {
+            db.run('UPDATE stages SET is_completed = 1, completed_date = CURRENT_TIMESTAMP, not_applicable = 0, not_applicable_reason = NULL, not_applicable_by = NULL, not_applicable_at = NULL WHERE id = ?', [stageId], (completeErr) => {
               if (completeErr) return rollbackAndReport(completeErr, callback);
               db.run('COMMIT', (commitErr) => {
                 if (commitErr) return callback(commitErr);
@@ -2553,6 +2621,83 @@ apiRouter.put('/stages/:id/uncomplete', (req: Request, res: Response) => {
     });
     
     res.json({ message: 'Etapa reabierta exitosamente' });
+  });
+});
+
+// Marcar una etapa como "No aplica" (motivo obligatorio; se registra quién).
+apiRouter.put('/stages/:id/not-applicable', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  const organizationId = req.user!.organizationId;
+
+  if (reason.length < 5) {
+    return res.status(400).json({ error: 'Escribí el motivo por el que la etapa no aplica (al menos 5 caracteres).' });
+  }
+
+  const lookupSql = `
+    SELECT s.name, s.is_completed, p.name as project_name
+    FROM stages s INNER JOIN projects p ON s.project_id = p.id
+    WHERE s.id = ? AND p.organization_id = ?
+  `;
+  db.get(lookupSql, [id, organizationId], (err, stage: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!stage) return res.status(404).json({ error: 'Etapa no encontrada' });
+    if (stage.is_completed) return res.status(400).json({ error: 'La etapa ya está completada.' });
+
+    db.run(
+      `UPDATE stages SET not_applicable = 1, not_applicable_reason = ?, not_applicable_by = ?, not_applicable_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [reason, req.user!.userId, id],
+      (updateErr) => {
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        logAudit({
+          organizationId,
+          userId: req.user!.userId,
+          action: 'NOT_APPLICABLE',
+          entityType: 'stage',
+          entityId: Number(id),
+          projectName: stage.project_name,
+          details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name, reason }),
+          ipAddress: req.ip,
+        });
+        res.json({ message: 'Etapa marcada como No aplica' });
+      }
+    );
+  });
+});
+
+// Deshacer "No aplica".
+apiRouter.delete('/stages/:id/not-applicable', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const organizationId = req.user!.organizationId;
+  const lookupSql = `
+    SELECT s.name, s.not_applicable_reason, p.name as project_name, p.status as project_status
+    FROM stages s INNER JOIN projects p ON s.project_id = p.id
+    WHERE s.id = ? AND p.organization_id = ? AND s.not_applicable = 1
+  `;
+  db.get(lookupSql, [id, organizationId], (err, stage: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!stage) return res.status(404).json({ error: 'La etapa no está marcada como No aplica' });
+    if (stage.project_status === 'completed') {
+      return res.status(400).json({ error: 'El proyecto está completado: reabrilo antes de cambiar esta etapa.' });
+    }
+    db.run(
+      'UPDATE stages SET not_applicable = 0, not_applicable_reason = NULL, not_applicable_by = NULL, not_applicable_at = NULL WHERE id = ?',
+      [id],
+      (updateErr) => {
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        logAudit({
+          organizationId,
+          userId: req.user!.userId,
+          action: 'UNDO_NOT_APPLICABLE',
+          entityType: 'stage',
+          entityId: Number(id),
+          projectName: stage.project_name,
+          details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name, previous_reason: stage.not_applicable_reason }),
+          ipAddress: req.ip,
+        });
+        res.json({ message: 'Se quitó "No aplica" de la etapa' });
+      }
+    );
   });
 });
 

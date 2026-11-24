@@ -461,14 +461,16 @@ export default function StageTemplatesManagement() {
 
                   <FormControlLabel
                     control={<Switch checked={formData.is_required} onChange={(e) => setFormData({ ...formData, is_required: e.target.checked })} />}
-                    label="Obligatoria (no se puede eliminar del proyecto)"
+                    label="Obligatoria (no se puede eliminar, y el proyecto no se completa sin resolverla)"
                   />
                   <FormControlLabel
                     control={<Switch checked={formData.counts_work_time} onChange={(e) => setFormData({ ...formData, counts_work_time: e.target.checked })} />}
                     label="Suma tiempo de trabajo (en el resumen anual)"
                   />
                   {selectedTemplate && (
-                    <FormHelperText>Los cambios se aplican a los proyectos nuevos; los existentes conservan su configuración.</FormHelperText>
+                    <FormHelperText>
+                      Los cambios se aplican a los proyectos nuevos. "Obligatoria" también se aplica a los proyectos en curso; los completados no cambian.
+                    </FormHelperText>
                   )}
                 </Stack>
               </AccordionDetails>

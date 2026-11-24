@@ -10,6 +10,16 @@ export interface StageAttributes {
   milestone?: StageMilestone | null;
   is_required?: number | boolean;
   counts_work_time?: number | boolean;
+  // "No aplica" (solo en etapas de proyecto): motivo y quién lo decidió.
+  not_applicable?: number | boolean;
+  not_applicable_reason?: string | null;
+  not_applicable_by_name?: string | null;
+  not_applicable_at?: string | null;
+}
+
+/** Etapa obligatoria que todavía no está completada ni marcada "No aplica". */
+export function isPendingRequired(stage: StageAttributes & { is_completed?: boolean | number }): boolean {
+  return Boolean(stage.is_required) && !stage.is_completed && !stage.not_applicable;
 }
 
 export const STAGE_KIND_LABELS: Record<StageKind, string> = {
