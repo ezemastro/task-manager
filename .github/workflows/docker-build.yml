@@ -62,8 +62,5 @@ jobs:
       - name: Image digest
         run: echo ${{ steps.meta.outputs.digest }}
 
-      - name: Trigger Coolify Deployment
-        if: success() && github.event_name != 'pull_request'
-        run: |
-          curl -X POST "http://mastropietro.ddns.net:8000/api/v1/deploy?uuid=tlxs9ylfucrogzic7wuoq915&force=false" \
-               -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+      # El despliegue en Coolify lo dispara el webhook de GitHub directamente
+      # (cada push a main), así que no hace falta llamar a su API desde acá.
