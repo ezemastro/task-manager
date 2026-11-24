@@ -1,5 +1,6 @@
 import { Box, Chip, Stack, Typography } from '@mui/material';
-import type { ProjectDelivery } from '../services/apiClient';
+import type { ProjectDelivery, Stage } from '../services/apiClient';
+import { getDelayCauseLabel, type HoldPeriod } from '../utils/delayCauses';
 
 // Fechas de calendario ya resueltas por la API (AAAA-MM-DD): se muestran
 // tal cual, sin convertir zona horaria, para no correrlas un día.
@@ -10,6 +11,16 @@ function formatCalendarDate(value: string | null): string {
 }
 
 const pluralDays = (days: number) => `${days} ${days === 1 ? 'día' : 'días'}`;
+
+// Días en espera del proyecto (etapas + paralizado), agrupados por causa.
+function holdDaysByCause(stages: Stage[], projectHolds: HoldPeriod[]) {
+  const totals = new Map<string, number>();
+  [...projectHolds, ...stages.flatMap((stage) => stage.holds ?? [])].forEach((hold) => {
+    const label = getDelayCauseLabel(hold.cause);
+    totals.set(label, (totals.get(label) ?? 0) + hold.days);
+  });
+  return Array.from(totals.entries()).filter(([, days]) => days > 0);
+}
 
 function statusChip(delivery: ProjectDelivery) {
   switch (delivery.status) {
@@ -30,7 +41,17 @@ function statusChip(delivery: ProjectDelivery) {
  * Comprometida / Entregada / Cerrada. El retraso compara la entrega real
  * con la fecha comprometida; el cierre del cliente no cuenta.
  */
-export default function DeliveryDatesPanel({ delivery }: { delivery: ProjectDelivery }) {
+export default function DeliveryDatesPanel({
+  delivery,
+  stages = [],
+  projectHolds = [],
+}: {
+  delivery: ProjectDelivery;
+  stages?: Stage[];
+  projectHolds?: HoldPeriod[];
+}) {
+  const waiting = holdDaysByCause(stages, projectHolds);
+  const attribution = delivery.attribution;
   const items = [
     { label: 'Comprometida', value: delivery.committed_date, hint: 'Acordada con el cliente' },
     { label: 'Entregada', value: delivery.delivered_date, hint: 'Al terminar "Entrega completa y revisada"' },
@@ -58,6 +79,18 @@ export default function DeliveryDatesPanel({ delivery }: { delivery: ProjectDeli
           </Box>
         ))}
       </Box>
+      {attribution && (
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">Retraso atribuible:</Typography>
+          <Chip label={`Estudio: ${pluralDays(attribution.studio_days)}`} size="small" color="warning" variant="outlined" />
+          <Chip label={`Cliente: ${pluralDays(attribution.client_days)}`} size="small" color="info" variant="outlined" />
+        </Stack>
+      )}
+      {waiting.length > 0 && (
+        <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+          Días en espera: {waiting.map(([label, days]) => `${label} ${pluralDays(days)}`).join(' · ')}
+        </Typography>
+      )}
     </Box>
   );
 }

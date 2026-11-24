@@ -39,6 +39,8 @@ import EditProjectModal from './EditProjectModal';
 import StageCard from './StageCard';
 import DeliveryDatesPanel from './DeliveryDatesPanel';
 import RequiredStagesDialog from './RequiredStagesDialog';
+import CauseDialog from './CauseDialog';
+import { getDelayCauseLabel, pluralDays, type DelayCause } from '../utils/delayCauses';
 import { isPendingRequired } from '../utils/stageAttributes';
 import ProjectTagsDialog from './ProjectTagsDialog';
 import { clearProjectReturnSnapshot } from '../utils/projectReturnSnapshot';
@@ -60,6 +62,7 @@ export default function ProjectDetail() {
   const [showDeleteStageDialog, setShowDeleteStageDialog] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
   const [showRequiredDialog, setShowRequiredDialog] = useState(false);
+  const [showPauseDialog, setShowPauseDialog] = useState(false);
   const [deletingStage, setDeletingStage] = useState(false);
   const [stageLifecycleLoading, setStageLifecycleLoading] = useState(false);
   
@@ -131,17 +134,19 @@ export default function ProjectDetail() {
     }
   };
 
-  const handlePauseProject = async () => {
+  // Paralizar pide la causa; los días paralizado se cuentan solos hasta reactivar.
+  const handlePauseProject = () => {
     if (!id || !project) return;
-    
-    try {
-      await apiClient.updateProject(Number(id), { status: 'paused' });
-      await fetchProjectDetail();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al paralizar proyecto';
-      setError(message);
-    }
+    setShowPauseDialog(true);
   };
+
+  const pauseProject = async (cause: DelayCause, note: string | null) => {
+    await apiClient.updateProject(Number(id), { status: 'paused', pause_cause: cause, pause_note: note });
+    setShowPauseDialog(false);
+    await fetchProjectDetail();
+  };
+
+  const openProjectHold = project?.project_holds?.find((hold) => !hold.ended_at) ?? null;
 
   const handleResumeProject = async () => {
     if (!id || !project) return;
@@ -333,7 +338,10 @@ export default function ProjectDetail() {
                 Reactivar Proyecto
               </Button>
               <Chip 
-                label="Paralizado" 
+                label={openProjectHold
+                  ? `Paralizado · ${getDelayCauseLabel(openProjectHold.cause)} · ${pluralDays(openProjectHold.days)}`
+                  : 'Paralizado'}
+                title={openProjectHold?.note ?? undefined}
                 color="warning" 
                 icon={<PauseCircleIcon />}
                 sx={{ alignSelf: { xs: 'flex-start', sm: 'center' } }}
@@ -472,7 +480,7 @@ export default function ProjectDetail() {
               )}
             </Stack>
 
-            {project.delivery && <DeliveryDatesPanel delivery={project.delivery} />}
+            {project.delivery && <DeliveryDatesPanel delivery={project.delivery} stages={stages} projectHolds={project.project_holds ?? []} />}
           </Stack>
         </CardContent>
       </Card>
@@ -576,6 +584,14 @@ export default function ProjectDetail() {
         projectId={Number(id)}
       />
 
+      <CauseDialog
+        open={showPauseDialog}
+        title="Paralizar proyecto"
+        description="Los días paralizado se cuentan solos hasta que lo reactives. ¿Por qué se paraliza?"
+        confirmLabel="Paralizar"
+        onClose={() => setShowPauseDialog(false)}
+        onConfirm={pauseProject}
+      />
       <RequiredStagesDialog
         open={showRequiredDialog}
         pendingStages={pendingRequiredStages}

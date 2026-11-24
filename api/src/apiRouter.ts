@@ -121,6 +121,51 @@ const NOT_APPLICABLE_COLUMNS = [
   ['not_applicable_at', 'DATETIME'],
 ] as const;
 
+// Causas de retraso / espera. Las del lado del cliente (cliente, falta de
+// información, cambio de arquitectura) se descuentan del retraso como
+// "atribuible al cliente"; el resto (interna, otra, sin causa) es "del estudio".
+const DELAY_CAUSES = ['client', 'internal', 'missing_info', 'architecture_change', 'other'] as const;
+type DelayCause = typeof DELAY_CAUSES[number];
+const CLIENT_SIDE_CAUSES: ReadonlySet<string> = new Set(['client', 'missing_info', 'architecture_change']);
+const isDelayCause = (value: unknown): value is DelayCause => typeof value === 'string' && (DELAY_CAUSES as readonly string[]).includes(value);
+
+// Causa declarada cuando una etapa supera su fecha estimada.
+const DELAY_CAUSE_COLUMNS = [
+  ['delay_cause', 'TEXT'],
+  ['delay_cause_note', 'TEXT'],
+  ['delay_cause_by', 'INTEGER'],
+  ['delay_cause_at', 'DATETIME'],
+] as const;
+
+function ensureDelayCauseColumns() {
+  db.all('PRAGMA table_info(stages)', (err, columns: Array<{ name: string }>) => {
+    if (err) {
+      console.error('Error al verificar columnas de causa de retraso en stages:', err.message);
+      return;
+    }
+    DELAY_CAUSE_COLUMNS
+      .filter(([name]) => !columns.some((column) => column.name === name))
+      .forEach(([name, type]) => {
+        db.run(`ALTER TABLE stages ADD COLUMN ${name} ${type}`, (alterErr) => {
+          if (alterErr) console.error(`Error al agregar ${name} a stages:`, alterErr.message);
+        });
+      });
+  });
+}
+
+// Valida causa + nota (la nota es obligatoria cuando la causa es "Otra").
+function parseCauseInput(body: any): { cause: DelayCause; note: string | null } | { error: string } {
+  const cause = body?.cause;
+  if (!isDelayCause(cause)) {
+    return { error: 'Elegí la causa: Cliente, Interna, Falta de información, Cambio de arquitectura u Otra.' };
+  }
+  const note = typeof body?.note === 'string' ? body.note.trim() : '';
+  if (cause === 'other' && note.length < 3) {
+    return { error: 'Si la causa es "Otra", escribí una breve descripción.' };
+  }
+  return { cause, note: note || null };
+}
+
 function ensureNotApplicableColumns() {
   db.all('PRAGMA table_info(stages)', (err, columns: Array<{ name: string }>) => {
     if (err) {
@@ -139,6 +184,7 @@ function ensureNotApplicableColumns() {
 
 function ensureStageAttributeColumns() {
   ensureNotApplicableColumns();
+  ensureDelayCauseColumns();
   ['stage_templates', 'stages'].forEach((table) => {
     db.all(`PRAGMA table_info(${table})`, (err, columns: Array<{ name: string }>) => {
       if (err) {
@@ -462,6 +508,32 @@ function initializeDatabase() {
     db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_cycles_one_open ON stage_cycles(stage_id) WHERE ended_at IS NULL');
     db.run('CREATE INDEX IF NOT EXISTS idx_stage_cycles_stage_history ON stage_cycles(stage_id, cycle_number DESC)');
     db.run('CREATE INDEX IF NOT EXISTS idx_stage_cycles_organization ON stage_cycles(organization_id, project_id, stage_id)');
+
+    // Períodos de espera: de una etapa ("En espera") o del proyecto entero
+    // (stage_id NULL, cuando se paraliza). Los días se cuentan solos entre
+    // started_at y ended_at (o hoy, si sigue abierto).
+    db.run(`
+      CREATE TABLE IF NOT EXISTS stage_holds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL,
+        project_id INTEGER NOT NULL,
+        stage_id INTEGER,
+        cause TEXT,
+        note TEXT,
+        started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        started_by INTEGER,
+        ended_at DATETIME,
+        ended_by INTEGER,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (stage_id) REFERENCES stages(id) ON DELETE CASCADE,
+        FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (ended_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_holds_one_open_stage ON stage_holds(stage_id) WHERE stage_id IS NOT NULL AND ended_at IS NULL');
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_stage_holds_one_open_project ON stage_holds(project_id) WHERE stage_id IS NULL AND ended_at IS NULL');
+    db.run('CREATE INDEX IF NOT EXISTS idx_stage_holds_project ON stage_holds(organization_id, project_id)');
     db.all('PRAGMA table_info(stage_cycles)', (cycleTableErr, cycleColumns: Array<{ name: string }>) => {
       if (!cycleTableErr && cycleColumns.length > 0 && !cycleColumns.some((column) => column.name === 'deadline_used')) {
         db.run('ALTER TABLE stage_cycles ADD COLUMN deadline_used DATETIME', (alterErr) => {
@@ -758,6 +830,7 @@ export interface DeliveryInfo {
   closed_date: string | null;
   status: DeliveryStatus;
   delay_days: number;
+  attribution?: DelayAttribution | null;
 }
 
 function completedStageDate(stages: DeliveryStageRow[], milestone: StageMilestone): string | null {
@@ -805,6 +878,69 @@ function computeDeliveryInfo(
   return overdueBy > 0
     ? { ...base, status: 'overdue', delay_days: overdueBy }
     : { ...base, status: 'pending', delay_days: 0 };
+}
+
+// ---- Retraso atribuible: estudio vs. cliente ----
+// Días "del cliente" = unión (sin contar dos veces el mismo día) de:
+//  - los períodos en espera (de etapa o del proyecto) con causa del lado del cliente;
+//  - los días que una etapa estuvo vencida con causa del lado del cliente
+//    (desde su fecha estimada hasta que se completó).
+// Se cuentan hasta la entrega (u hoy) y nunca superan el retraso total.
+// El resto del retraso es atribuible al estudio.
+interface HoldRow {
+  stage_id: number | null;
+  cause: string | null;
+  started_at: string;
+  ended_at: string | null;
+}
+
+interface DelayCauseStageRow {
+  delay_cause?: string | null;
+  estimated_end_date?: string | null;
+  completed_date?: string | null;
+  is_completed?: number | boolean | null;
+}
+
+export interface DelayAttribution {
+  client_days: number;
+  studio_days: number;
+}
+
+function addCalendarDays(days: Set<string>, from: string | null, toExclusive: string | null, limit: string) {
+  if (!from || !toExclusive) return;
+  const end = toExclusive < limit ? toExclusive : limit;
+  let cursor = Date.parse(`${from}T00:00:00Z`);
+  const endMillis = Date.parse(`${end}T00:00:00Z`);
+  if (!Number.isFinite(cursor) || !Number.isFinite(endMillis)) return;
+  // Tope de seguridad (10 años) ante fechas mal cargadas.
+  for (let i = 0; cursor < endMillis && i < 3660; i++, cursor += 86400000) {
+    days.add(new Date(cursor).toISOString().slice(0, 10));
+  }
+}
+
+function computeDelayAttribution(
+  info: DeliveryInfo,
+  holds: HoldRow[],
+  stages: DelayCauseStageRow[],
+  now: Date = new Date(),
+): DelayAttribution | null {
+  if ((info.status !== 'late' && info.status !== 'overdue') || info.delay_days <= 0) return null;
+  const today = businessCalendarDate(now.toISOString()) as string;
+  const limit = info.delivered_date ?? today;
+  const clientDays = new Set<string>();
+  holds
+    .filter((hold) => hold.cause && CLIENT_SIDE_CAUSES.has(hold.cause))
+    .forEach((hold) => addCalendarDays(clientDays, businessCalendarDate(hold.started_at), businessCalendarDate(hold.ended_at) ?? today, limit));
+  stages
+    .filter((stage) => stage.delay_cause && CLIENT_SIDE_CAUSES.has(stage.delay_cause) && stage.estimated_end_date)
+    .forEach((stage) => addCalendarDays(
+      clientDays,
+      dateOnly(stage.estimated_end_date),
+      stage.is_completed ? businessCalendarDate(stage.completed_date) : today,
+      limit,
+    ));
+  const clientShare = Math.min(info.delay_days, clientDays.size);
+  return { client_days: clientShare, studio_days: info.delay_days - clientShare };
 }
 
 function calendarDurationDays(startedAt: string | null | undefined, endedAt: string | null | undefined): number | null {
@@ -892,9 +1028,16 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
   // Entregas del año: proyectos cuya etapa de entrega se completó en `year`.
   const deliveryStagesSql = `
     SELECT p.id as project_id, p.deadline, p.status, p.completed_date as project_completed_date,
-           s.milestone, s.is_completed, s.completed_date
+           s.milestone, s.is_completed, s.completed_date, s.delay_cause, s.estimated_end_date
     FROM projects p
     INNER JOIN stages s ON s.project_id = p.id
+    WHERE p.organization_id = ?${typeFilter}
+  `;
+  // Períodos de espera (de etapas y de proyectos paralizados).
+  const holdsSql = `
+    SELECT h.project_id, h.stage_id, h.cause, h.started_at, h.ended_at
+    FROM stage_holds h
+    INNER JOIN projects p ON p.id = h.project_id
     WHERE p.organization_id = ?${typeFilter}
   `;
   // Clientes con proyectos iniciados (creados) en el año.
@@ -908,29 +1051,60 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
   `;
 
   try {
-    const [[counts], stages, deliveryRows, years, clients] = await Promise.all([
+    const [[counts], stages, deliveryRows, years, clients, holdRows] = await Promise.all([
       summaryDbAll(countsSql, [String(year), String(year), organizationId, ...typeParams]),
       summaryDbAll(stagesSql, [organizationId, String(year), ...typeParams]),
       summaryDbAll(deliveryStagesSql, [organizationId, ...typeParams]),
       summaryDbAll(yearsSql, [organizationId, organizationId]),
       summaryDbAll<{ id: number; name: string; projects: number }>(clientsSql, [organizationId, String(year), ...typeParams]),
+      summaryDbAll<HoldRow & { project_id: number }>(holdsSql, [organizationId, ...typeParams]),
     ]);
+    const holdsByProject = new Map<number, HoldRow[]>();
+    holdRows.forEach((hold) => {
+      const list = holdsByProject.get(hold.project_id) ?? [];
+      list.push(hold);
+      holdsByProject.set(hold.project_id, list);
+    });
 
-    const byProject = new Map<number, { project: any; stages: DeliveryStageRow[] }>();
+    const byProject = new Map<number, { project: any; stages: Array<DeliveryStageRow & DelayCauseStageRow> }>();
     deliveryRows.forEach((row) => {
       const entry = byProject.get(row.project_id) ?? {
         project: { deadline: row.deadline, status: row.status, completed_date: row.project_completed_date },
         stages: [],
       };
-      entry.stages.push({ milestone: row.milestone, is_completed: row.is_completed, completed_date: row.completed_date });
+      entry.stages.push({
+        milestone: row.milestone,
+        is_completed: row.is_completed,
+        completed_date: row.completed_date,
+        delay_cause: row.delay_cause,
+        estimated_end_date: row.estimated_end_date,
+      } as DeliveryStageRow & DelayCauseStageRow);
       byProject.set(row.project_id, entry);
     });
-    const deliveredThisYear = Array.from(byProject.values())
-      .map(({ project, stages: projectStages }) => computeDeliveryInfo(project, projectStages))
+    const deliveredThisYear = Array.from(byProject.entries())
+      .map(([projectId, { project, stages: projectStages }]) => {
+        const info = computeDeliveryInfo(project, projectStages);
+        info.attribution = computeDelayAttribution(info, holdsByProject.get(projectId) ?? [], projectStages);
+        return info;
+      })
       .filter((info) => info.delivered_date?.startsWith(`${year}-`));
     const measured = deliveredThisYear.filter((info) => info.status === 'on_time' || info.status === 'late');
     const lateDeliveries = measured.filter((info) => info.status === 'late');
     const totalDelayDays = lateDeliveries.reduce((sum, info) => sum + info.delay_days, 0);
+    const clientDelayDays = lateDeliveries.reduce((sum, info) => sum + (info.attribution?.client_days ?? 0), 0);
+    // Días en espera dentro del año, por causa (sin causa = 'unspecified').
+    const yearStart = `${year}-01-01`;
+    const nextYearStart = `${year + 1}-01-01`;
+    const today = businessCalendarDate(new Date().toISOString()) as string;
+    const holdDaysByCause: Record<string, number> = {};
+    holdRows.forEach((hold) => {
+      const days = new Set<string>();
+      const from = businessCalendarDate(hold.started_at);
+      addCalendarDays(days, from && from > yearStart ? from : yearStart, businessCalendarDate(hold.ended_at) ?? today, nextYearStart);
+      if (!from || days.size === 0) return;
+      const key = hold.cause ?? 'unspecified';
+      holdDaysByCause[key] = (holdDaysByCause[key] ?? 0) + days.size;
+    });
     const recurringClients = clients
       .filter((client) => Number(client.projects) >= RECURRING_CLIENT_MIN_PROJECTS)
       .map((client) => ({ id: client.id, name: client.name, projects: Number(client.projects) }));
@@ -967,7 +1141,14 @@ apiRouter.get('/summary', async (req: Request, res: Response) => {
         late_percentage: measured.length > 0 ? Math.round((lateDeliveries.length / measured.length) * 100) : null,
         total_delay_days: totalDelayDays,
         average_delay_days: lateDeliveries.length > 0 ? Math.round((totalDelayDays / lateDeliveries.length) * 10) / 10 : null,
+        // Retraso separado por origen (cliente: Cliente, Falta de información,
+        // Cambio de arquitectura; estudio: el resto).
+        client_delay_days: clientDelayDays,
+        studio_delay_days: totalDelayDays - clientDelayDays,
+        client_delay_percentage: totalDelayDays > 0 ? Math.round((clientDelayDays / totalDelayDays) * 100) : null,
+        studio_delay_percentage: totalDelayDays > 0 ? 100 - Math.round((clientDelayDays / totalDelayDays) * 100) : null,
       },
+      hold_days_by_cause: holdDaysByCause,
       recurring_clients: {
         min_projects: RECURRING_CLIENT_MIN_PROJECTS,
         count: recurringClients.length,
@@ -1657,12 +1838,14 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
         u.name as responsible_name,
         u.account_email as responsible_email,
         u.role as responsible_role,
-        nau.name as not_applicable_by_name
+        nau.name as not_applicable_by_name,
+        dcu.name as delay_cause_by_name
       FROM stages s
       INNER JOIN projects p ON s.project_id = p.id
       LEFT JOIN clients c ON p.client_id = c.id
       LEFT JOIN users u ON s.responsible_id = u.id
       LEFT JOIN users nau ON s.not_applicable_by = nau.id
+      LEFT JOIN users dcu ON s.delay_cause_by = dcu.id
       WHERE s.project_id = ?
       ORDER BY s.order_number
     `;
@@ -1743,11 +1926,39 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
             projectTags = [];
           }
 
-          res.json({
-            ...project,
-            stages: parsedStages,
-            tags: projectTags || [],
-            delivery: computeDeliveryInfo(project as any, stages),
+          const holdsSql = `
+            SELECT h.id, h.stage_id, h.cause, h.note, h.started_at, h.ended_at,
+                   su.name as started_by_name, eu.name as ended_by_name
+            FROM stage_holds h
+            LEFT JOIN users su ON su.id = h.started_by
+            LEFT JOIN users eu ON eu.id = h.ended_by
+            WHERE h.project_id = ?
+            ORDER BY h.started_at
+          `;
+          db.all(holdsSql, [id], (holdsErr, holdRows: any[]) => {
+            if (holdsErr) console.error('Error fetching holds:', holdsErr);
+            const holds = (holdsErr ? [] : holdRows).map((hold) => ({
+              ...hold,
+              days: calendarDurationDays(hold.started_at, hold.ended_at) ?? 0,
+            }));
+            const delivery = computeDeliveryInfo(project as any, stages);
+            delivery.attribution = computeDelayAttribution(delivery, holds, stages);
+
+            res.json({
+              ...project,
+              stages: (parsedStages as any[]).map((stage) => {
+                const stageHolds = holds.filter((hold) => hold.stage_id === stage.id);
+                return {
+                  ...stage,
+                  holds: stageHolds,
+                  open_hold: stageHolds.find((hold) => !hold.ended_at) ?? null,
+                  hold_days: stageHolds.reduce((sum, hold) => sum + hold.days, 0),
+                };
+              }),
+              tags: projectTags || [],
+              project_holds: holds.filter((hold) => hold.stage_id == null),
+              delivery,
+            });
           });
         });
       });
@@ -1758,11 +1969,18 @@ apiRouter.get('/projects/:id', (req: Request, res: Response) => {
 // Actualizar un proyecto
 apiRouter.put('/projects/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, contact, status, client_id, responsible_id, deadline, project_type } = req.body;
+  const { name, description, contact, status, client_id, responsible_id, deadline, project_type, pause_cause, pause_note } = req.body;
   const organizationId = req.user!.organizationId;
 
   if (project_type !== undefined && !isProjectType(project_type)) {
     return res.status(400).json({ error: 'Tipo de proyecto inválido (obra_nueva, carteles o reforma)' });
+  }
+  // Al paralizar se puede indicar la causa (la pantalla la pide siempre).
+  let pauseCause: { cause: DelayCause; note: string | null } | null = null;
+  if (status === 'paused' && pause_cause !== undefined && pause_cause !== null) {
+    const parsed = parseCauseInput({ cause: pause_cause, note: pause_note });
+    if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+    pauseCause = parsed;
   }
 
   // No se puede completar un proyecto con etapas obligatorias pendientes
@@ -1848,7 +2066,22 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
     db.run(sql, values, function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) return res.status(404).json({ error: 'Proyecto no encontrado' });
-    
+
+      // Períodos de espera del proyecto: al paralizar se abre uno con la causa;
+      // al reactivar o completar se cierra. Completar cierra también las esperas de etapas.
+      const userId = req.user!.userId;
+      if (status !== undefined && status !== existingProject.status) {
+        if (existingProject.status === 'paused' || status === 'completed') {
+          const onlyProjectHold = status === 'completed' ? '' : ' AND stage_id IS NULL';
+          db.run(`UPDATE stage_holds SET ended_at = CURRENT_TIMESTAMP, ended_by = ? WHERE project_id = ? AND organization_id = ? AND ended_at IS NULL${onlyProjectHold}`,
+            [userId, id, organizationId], (holdErr) => { if (holdErr) console.error('Error al cerrar esperas del proyecto:', holdErr.message); });
+        }
+        if (status === 'paused') {
+          db.run('INSERT OR IGNORE INTO stage_holds (organization_id, project_id, stage_id, cause, note, started_by) VALUES (?, ?, NULL, ?, ?, ?)',
+            [organizationId, id, pauseCause?.cause ?? null, pauseCause?.note ?? null, userId], (holdErr) => { if (holdErr) console.error('Error al registrar la paralización:', holdErr.message); });
+        }
+      }
+
     // Obtener nombre del proyecto si se actualizó
       db.get('SELECT name FROM projects WHERE id = ? AND organization_id = ?', [id, organizationId], (err, project: any) => {
         const projectName = (name || project?.name) as string;
@@ -1860,7 +2093,7 @@ apiRouter.put('/projects/:id', (req: Request, res: Response) => {
         entityType: 'project',
         entityId: Number(id),
         projectName: projectName,
-          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline, project_type }),
+          details: JSON.stringify({ name, description, contact: normalizedContact, status, client_id, responsible_id, deadline, project_type, pause_cause: pauseCause?.cause, pause_note: pauseCause?.note }),
         ipAddress: req.ip
       });
       });
@@ -2151,11 +2384,15 @@ function completeStageAndCloseCycle(stageId: number, organizationId: number, use
           finishCycle(() => {
             db.run('UPDATE stages SET is_completed = 1, completed_date = CURRENT_TIMESTAMP, not_applicable = 0, not_applicable_reason = NULL, not_applicable_by = NULL, not_applicable_at = NULL WHERE id = ?', [stageId], (completeErr) => {
               if (completeErr) return rollbackAndReport(completeErr, callback);
+              // Completar la etapa cierra su espera abierta, si tenía.
+              db.run('UPDATE stage_holds SET ended_at = CURRENT_TIMESTAMP, ended_by = ? WHERE stage_id = ? AND ended_at IS NULL', [userId, stageId], (holdErr) => {
+              if (holdErr) return rollbackAndReport(holdErr, callback);
               db.run('COMMIT', (commitErr) => {
                 if (commitErr) return callback(commitErr);
                 if (cycle) logAudit({ organizationId, userId, action: 'END', entityType: 'stage_cycle', entityId: cycle.id, projectName: stage.project_name, details: JSON.stringify({ stage_id: stageId, cycle_number: cycle.cycle_number, deadline_used: stage.estimated_end_date || null }), ipAddress });
                 logAudit({ organizationId, userId, action: 'COMPLETE', entityType: 'stage', entityId: stageId, projectName: stage.project_name, details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name }), ipAddress });
                 callback(null);
+              });
               });
             });
           });
@@ -2738,6 +2975,111 @@ apiRouter.delete('/stages/:id/not-applicable', (req: Request, res: Response) => 
           ipAddress: req.ip,
         });
         res.json({ message: 'Se quitó "No aplica" de la etapa' });
+      }
+    );
+  });
+});
+
+// ==================== ESPERAS Y CAUSAS DE RETRASO ====================
+
+const STAGE_SCOPE_SQL = `
+  SELECT s.id, s.name, s.project_id, s.is_completed, s.estimated_end_date, p.name as project_name, p.status as project_status
+  FROM stages s INNER JOIN projects p ON s.project_id = p.id
+  WHERE s.id = ? AND p.organization_id = ?
+`;
+
+// Poner una etapa "En espera" con su causa. Los días se cuentan solos hasta reanudar.
+apiRouter.put('/stages/:id/hold', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const organizationId = req.user!.organizationId;
+  const parsed = parseCauseInput(req.body);
+  if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+
+  db.get(STAGE_SCOPE_SQL, [id, organizationId], (err, stage: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!stage) return res.status(404).json({ error: 'Etapa no encontrada' });
+    if (stage.is_completed) return res.status(400).json({ error: 'La etapa ya está completada.' });
+    if (stage.project_status === 'completed') return res.status(400).json({ error: 'El proyecto está completado.' });
+    db.run(
+      'INSERT INTO stage_holds (organization_id, project_id, stage_id, cause, note, started_by) VALUES (?, ?, ?, ?, ?, ?)',
+      [organizationId, stage.project_id, stage.id, parsed.cause, parsed.note, req.user!.userId],
+      function (insertErr) {
+        if (insertErr) {
+          if (/UNIQUE/i.test(insertErr.message)) return res.status(409).json({ error: 'La etapa ya está en espera.' });
+          return res.status(500).json({ error: insertErr.message });
+        }
+        logAudit({
+          organizationId,
+          userId: req.user!.userId,
+          action: 'HOLD',
+          entityType: 'stage',
+          entityId: stage.id,
+          projectName: stage.project_name,
+          details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name, cause: parsed.cause, note: parsed.note }),
+          ipAddress: req.ip,
+        });
+        res.status(201).json({ id: this.lastID, message: 'Etapa puesta en espera' });
+      }
+    );
+  });
+});
+
+// Reanudar una etapa en espera (cierra el período y deja registrados los días).
+apiRouter.delete('/stages/:id/hold', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const organizationId = req.user!.organizationId;
+  db.get(STAGE_SCOPE_SQL, [id, organizationId], (err, stage: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!stage) return res.status(404).json({ error: 'Etapa no encontrada' });
+    db.run(
+      'UPDATE stage_holds SET ended_at = CURRENT_TIMESTAMP, ended_by = ? WHERE stage_id = ? AND organization_id = ? AND ended_at IS NULL',
+      [req.user!.userId, stage.id, organizationId],
+      function (updateErr) {
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'La etapa no está en espera.' });
+        logAudit({
+          organizationId,
+          userId: req.user!.userId,
+          action: 'RESUME',
+          entityType: 'stage',
+          entityId: stage.id,
+          projectName: stage.project_name,
+          details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name }),
+          ipAddress: req.ip,
+        });
+        res.json({ message: 'Etapa reanudada' });
+      }
+    );
+  });
+});
+
+// Causa del retraso de una etapa que superó su fecha estimada.
+apiRouter.put('/stages/:id/delay-cause', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const organizationId = req.user!.organizationId;
+  const parsed = parseCauseInput(req.body);
+  if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+
+  db.get(STAGE_SCOPE_SQL, [id, organizationId], (err, stage: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!stage) return res.status(404).json({ error: 'Etapa no encontrada' });
+    if (!stage.estimated_end_date) return res.status(400).json({ error: 'La etapa no tiene fecha estimada.' });
+    db.run(
+      'UPDATE stages SET delay_cause = ?, delay_cause_note = ?, delay_cause_by = ?, delay_cause_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [parsed.cause, parsed.note, req.user!.userId, stage.id],
+      (updateErr) => {
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+        logAudit({
+          organizationId,
+          userId: req.user!.userId,
+          action: 'DELAY_CAUSE',
+          entityType: 'stage',
+          entityId: stage.id,
+          projectName: stage.project_name,
+          details: JSON.stringify({ stage_name: stage.name, project_name: stage.project_name, cause: parsed.cause, note: parsed.note }),
+          ipAddress: req.ip,
+        });
+        res.json({ message: 'Causa del retraso registrada' });
       }
     );
   });

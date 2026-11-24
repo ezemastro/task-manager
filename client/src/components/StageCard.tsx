@@ -22,6 +22,9 @@ import type { Stage, StageCycle } from '../services/apiClient';
 import { apiClient } from '../services/apiClient';
 import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
 import StageCompletionFollowUps, { isDeliveryReviewStage } from './StageCompletionFollowUps';
+import StageDelayControls from './StageDelayControls';
+import CauseDialog from './CauseDialog';
+import { isStageOverdue } from '../utils/delayCauses';
 
 interface StageCardProps {
   stage: Stage;
@@ -39,6 +42,8 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
   const [cyclesLoaded, setCyclesLoaded] = useState(false);
   const [stageStartConfirmed, setStageStartConfirmed] = useState(Boolean(stage.start_date));
   const [completionFollowUp, setCompletionFollowUp] = useState<Stage | null>(null);
+  // Al completar una etapa vencida sin causa, primero se pide la causa del retraso.
+  const [askDelayCause, setAskDelayCause] = useState(false);
 
   const fetchCycles = useCallback(async () => {
     let loaded = false;
@@ -94,6 +99,14 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
 
   const handleComplete = async () => {
     if (!isCurrentStage) return;
+    if (isStageOverdue(stage) && !stage.delay_cause) {
+      setAskDelayCause(true);
+      return;
+    }
+    await completeNow();
+  };
+
+  const completeNow = async () => {
 
     setLoading(true);
     onLifecycleLoadingChange?.(true);
@@ -268,6 +281,12 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
           </Stack>
         ) : null}
 
+        <StageDelayControls
+          stage={stage}
+          onChanged={onCompleted}
+          disabled={loading || siblingLifecycleLoading || cycleLoading}
+        />
+
         {/* Tags si existen */}
         {stage.tags && stage.tags.length > 0 ? (
           <Box sx={{ mt: 2 }}>
@@ -432,6 +451,19 @@ export default function StageCard({ stage, isCurrentStage, onCompleted, siblingL
             )}
           </Button>
         ) : null}
+
+        <CauseDialog
+          open={askDelayCause}
+          title={`"${stage.name}" superó su fecha estimada`}
+          description="Antes de completarla, indicá la causa del retraso."
+          confirmLabel="Guardar y completar"
+          onClose={() => setAskDelayCause(false)}
+          onConfirm={async (cause, note) => {
+            await apiClient.setStageDelayCause(stage.id, cause, note);
+            setAskDelayCause(false);
+            await completeNow();
+          }}
+        />
 
         {completionFollowUp && (
           <StageCompletionFollowUps

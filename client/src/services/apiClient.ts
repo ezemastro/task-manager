@@ -1,5 +1,6 @@
 import type { ProjectType } from '../utils/projectTypes';
 import type { StageAttributes } from '../utils/stageAttributes';
+import type { DelayCause, HoldPeriod } from '../utils/delayCauses';
 
 // ==================== TYPES & INTERFACES ====================
 
@@ -44,6 +45,8 @@ export interface Project {
   project_type?: ProjectType | null;
   /** Solo en GET /projects/:id: fechas comprometida/entregada/cerrada y retraso. */
   delivery?: ProjectDelivery;
+  /** Solo en GET /projects/:id: períodos en que el proyecto estuvo paralizado. */
+  project_holds?: HoldPeriod[];
   created_at: string;
   updated_at: string;
   total_stages?: number;
@@ -54,6 +57,15 @@ export interface Project {
 
 export interface Stage extends StageAttributes {
   id: number;
+  /** Causa declarada cuando la etapa superó su fecha estimada. */
+  delay_cause?: DelayCause | null;
+  delay_cause_note?: string | null;
+  delay_cause_by_name?: string | null;
+  delay_cause_at?: string | null;
+  /** Solo en GET /projects/:id: períodos "En espera" de la etapa. */
+  holds?: HoldPeriod[];
+  open_hold?: HoldPeriod | null;
+  hold_days?: number;
   project_id: number;
   template_id?: number;
   name: string;
@@ -173,6 +185,9 @@ export interface UpdateProjectRequest {
   client_id?: number;
   responsible_id?: number;
   deadline?: string | null;
+  /** Al paralizar: causa y nota (obligatoria si la causa es "Otra"). */
+  pause_cause?: DelayCause;
+  pause_note?: string | null;
 }
 
 export interface ProjectSummaryStage {
@@ -200,7 +215,13 @@ export interface ProjectSummary {
     late_percentage: number | null;
     total_delay_days: number;
     average_delay_days?: number | null;
+    client_delay_days?: number;
+    studio_delay_days?: number;
+    client_delay_percentage?: number | null;
+    studio_delay_percentage?: number | null;
   };
+  /** Días en espera dentro del año, por causa ('unspecified' = sin causa). */
+  hold_days_by_cause?: Record<string, number>;
   /** Clientes con más de 2 proyectos iniciados en el año (fidelización B2B). */
   recurring_clients?: {
     min_projects: number;
@@ -219,6 +240,8 @@ export interface ProjectDelivery {
   closed_date: string | null;
   status: 'on_time' | 'late' | 'pending' | 'overdue' | 'no_commitment';
   delay_days: number;
+  /** Retraso separado por origen (solo si está tarde). */
+  attribution?: { client_days: number; studio_days: number } | null;
 }
 
 export interface CreateStageRequest {
@@ -549,6 +572,23 @@ class ApiClient {
 
   async undoStageNotApplicable(id: number): Promise<{ message: string }> {
     const { data } = await this.api.delete(`/stages/${id}/not-applicable`);
+    return data;
+  }
+
+  /** Pone la etapa "En espera" con su causa; los días se cuentan solos. */
+  async holdStage(id: number, cause: DelayCause, note?: string | null): Promise<{ message: string }> {
+    const { data } = await this.api.put(`/stages/${id}/hold`, { cause, note });
+    return data;
+  }
+
+  async resumeStage(id: number): Promise<{ message: string }> {
+    const { data } = await this.api.delete(`/stages/${id}/hold`);
+    return data;
+  }
+
+  /** Registra la causa del retraso de una etapa vencida. */
+  async setStageDelayCause(id: number, cause: DelayCause, note?: string | null): Promise<{ message: string }> {
+    const { data } = await this.api.put(`/stages/${id}/delay-cause`, { cause, note });
     return data;
   }
 

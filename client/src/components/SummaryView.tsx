@@ -10,6 +10,7 @@ import {
   FormControl,
   Grid,
   InputLabel,
+  LinearProgress,
   MenuItem,
   Select,
   Stack,
@@ -27,8 +28,10 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import GroupsIcon from '@mui/icons-material/Groups';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
 import { apiClient, type ProjectSummary } from '../services/apiClient';
 import { PROJECT_TYPES, PROJECT_TYPE_LABELS, type ProjectType } from '../utils/projectTypes';
+import { DELAY_CAUSES, getCauseSide, getDelayCauseLabel } from '../utils/delayCauses';
 
 const currentYear = Number(new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Argentina/Buenos_Aires',
@@ -66,6 +69,9 @@ function IndicatorCard({
 }
 
 const pluralDays = (days: number) => `${days} ${days === 1 ? 'día' : 'días'}`;
+
+// Orden fijo de causas para la lista de días en espera; "sin causa" al final.
+const HOLD_CAUSE_ORDER = [...DELAY_CAUSES, 'unspecified'];
 
 export default function SummaryView() {
   const [year, setYear] = useState(currentYear);
@@ -193,6 +199,67 @@ export default function SummaryView() {
               />
             </Grid>
           </Grid>
+
+          {deliveries && (
+            <Card>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <CallSplitIcon color="primary" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Retraso por origen</Typography>
+                </Stack>
+                <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+                  De los {pluralDays(deliveries.total_delay_days)} de retraso de las entregas tardías{typeLabel}.
+                  Cliente = esperas y retrasos con causa Cliente, Falta de información o Cambio de arquitectura; el resto es del estudio.
+                </Typography>
+                {deliveries.total_delay_days > 0 ? (
+                  <>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <Typography color="text.secondary" variant="body2">Atribuible al estudio</Typography>
+                        <Typography variant="h4" sx={{ fontWeight: 700 }} color="warning.main">
+                          {pluralDays(deliveries.studio_delay_days ?? 0)}
+                          {deliveries.studio_delay_percentage != null && <Typography component="span" variant="h6" color="text.secondary"> · {deliveries.studio_delay_percentage}%</Typography>}
+                        </Typography>
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <Typography color="text.secondary" variant="body2">Atribuible al cliente</Typography>
+                        <Typography variant="h4" sx={{ fontWeight: 700 }} color="info.main">
+                          {pluralDays(deliveries.client_delay_days ?? 0)}
+                          {deliveries.client_delay_percentage != null && <Typography component="span" variant="h6" color="text.secondary"> · {deliveries.client_delay_percentage}%</Typography>}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                    <LinearProgress
+                      variant="determinate"
+                      value={deliveries.studio_delay_percentage ?? 0}
+                      color="warning"
+                      sx={{ mt: 2, height: 10, borderRadius: 5, bgcolor: 'info.light' }}
+                      aria-label="Proporción del retraso atribuible al estudio"
+                    />
+                  </>
+                ) : (
+                  <Typography color="text.secondary">Sin retrasos en las entregas del período.</Typography>
+                )}
+                {summary.hold_days_by_cause && Object.keys(summary.hold_days_by_cause).length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>Días en espera en {summary.year} (etapas en espera y proyectos paralizados):</Typography>
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                      {HOLD_CAUSE_ORDER
+                        .filter((cause) => summary.hold_days_by_cause?.[cause])
+                        .map((cause) => (
+                          <Chip
+                            key={cause}
+                            label={`${cause === 'unspecified' ? 'Sin causa' : getDelayCauseLabel(cause)} · ${pluralDays(summary.hold_days_by_cause![cause])}`}
+                            color={cause !== 'unspecified' && getCauseSide(cause) === 'cliente' ? 'info' : 'warning'}
+                            variant="outlined"
+                          />
+                        ))}
+                    </Stack>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {recurring && recurring.clients.length > 0 && (
             <Card>
