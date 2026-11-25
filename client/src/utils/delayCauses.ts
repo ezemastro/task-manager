@@ -73,3 +73,9 @@ export function isStageOverdue(stage: {
     : argentinaDate(new Date().toISOString());
   return end > estimated;
 }
+
+/** Etiqueta "Esperando respuesta (del) cliente": al ponerla se ofrece poner la etapa en espera. */
+export function isClientWaitingTag(name: string | null | undefined): boolean {
+  const normalized = (name ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return normalized.includes('esperando') && normalized.includes('cliente');
+}

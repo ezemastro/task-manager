@@ -117,7 +117,7 @@ export default function SummaryView() {
   // Hide stages without recorded duration. A stage with zero days but delayed
   // cycles stays visible so the delay is not silently discarded.
   const visibleStages = (summary?.stages ?? []).filter(
-    (stage) => stage.total_days > 0 || stage.delayed_cycles > 0,
+    (stage) => stage.total_days > 0 || (stage.waiting_days ?? 0) > 0 || stage.delayed_cycles > 0,
   );
 
   return (
@@ -287,7 +287,7 @@ export default function SummaryView() {
               </Stack>
               {summary.work_days !== undefined && visibleStages.length > 0 && (
                 <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
-                  Días de trabajo: <strong>{summary.work_days}</strong> (solo las etapas que suman tiempo de trabajo)
+                  Días de trabajo: <strong>{summary.work_days}</strong> (solo las etapas que suman tiempo de trabajo{summary.waiting_days_excluded ? `; se descontaron ${summary.waiting_days_excluded} días en espera` : ''})
                 </Typography>
               )}
               {visibleStages.length === 0 ? (
@@ -295,7 +295,7 @@ export default function SummaryView() {
               ) : (
                 <TableContainer>
                   <Table size="small">
-                    <TableHead><TableRow><TableCell>Etapa</TableCell><TableCell align="right">Días totales</TableCell><TableCell align="right">Ciclos demorados</TableCell><TableCell align="right">Suma tiempo</TableCell></TableRow></TableHead>
+                    <TableHead><TableRow><TableCell>Etapa</TableCell><TableCell align="right">Días de trabajo</TableCell><TableCell align="right">Días en espera</TableCell><TableCell align="right">Ciclos demorados</TableCell><TableCell align="right">Suma tiempo</TableCell></TableRow></TableHead>
                     <TableBody>{visibleStages.map((stage) => (
                       <TableRow key={stage.stage_name} sx={stage.counts_work_time === false ? { '& td': { color: 'text.secondary' } } : undefined}>
                         <TableCell sx={{ fontWeight: 600 }}>
@@ -303,6 +303,7 @@ export default function SummaryView() {
                           {stage.is_control && <Chip label="Control" size="small" variant="outlined" sx={{ ml: 1, height: 20 }} />}
                         </TableCell>
                         <TableCell align="right">{stage.total_days}</TableCell>
+                        <TableCell align="right">{stage.waiting_days ? stage.waiting_days : '–'}</TableCell>
                         <TableCell align="right">{stage.delayed_cycles}</TableCell>
                         <TableCell align="right">{stage.counts_work_time === false ? 'No' : 'Sí'}</TableCell>
                       </TableRow>

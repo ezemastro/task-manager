@@ -44,6 +44,8 @@ import StageCompletionFollowUps, { isDeliveryReviewStage, type CompletionStageIn
 import { formatLocalDate, formatLocalDateTime } from '../utils/dateUtils';
 import { useAssistantRefetch } from './assistant/AssistantDataBus';
 import { useScrollRestoration } from '../utils/useScrollRestoration';
+import CauseDialog from './CauseDialog';
+import { isClientWaitingTag } from '../utils/delayCauses';
 
 export default function StageDetail() {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +56,10 @@ export default function StageDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddTagDialog, setShowAddTagDialog] = useState(false);
+  // Al poner la etiqueta "Esperando respuesta cliente" se ofrece poner la etapa
+  // en espera (lo único que descuenta días de trabajo y mide el tiempo del cliente).
+  const [offerHoldForTag, setOfferHoldForTag] = useState(false);
+  const [offerResumeForTag, setOfferResumeForTag] = useState(false);
   const [showCreateTagDialog, setShowCreateTagDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -283,8 +289,10 @@ export default function StageDetail() {
     try {
       await apiClient.addTagToStage(Number(id), { tag_id: selectedTag.id });
       setShowAddTagDialog(false);
+      const offerHold = isClientWaitingTag(selectedTag.name) && !stage?.open_hold && !stage?.is_completed;
       setSelectedTag(null);
       await fetchStageDetail();
+      if (offerHold) setOfferHoldForTag(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al agregar etiqueta';
       setError(message);
@@ -295,8 +303,11 @@ export default function StageDetail() {
     if (!id) return;
     
     try {
+      const removedTag = stage?.tags.find((tag) => tag.id === tagId);
       await apiClient.removeTagFromStage(Number(id), tagId);
+      const offerResume = isClientWaitingTag(removedTag?.name) && Boolean(stage?.open_hold);
       await fetchStageDetail();
+      if (offerResume) setOfferResumeForTag(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al remover etiqueta';
       setError(message);
@@ -1363,6 +1374,47 @@ export default function StageDetail() {
           </Button>
           <Button onClick={handleDeleteStage} color="error" variant="contained" disabled={deleting}>
             {deleting ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <CauseDialog
+        open={offerHoldForTag}
+        title="¿Poner la etapa en espera?"
+        description="La etiqueta sola no frena el reloj. Si ponés la etapa en espera, los días hasta que la reanudes no suman como trabajo del estudio y quedan registrados como espera del cliente."
+        confirmLabel="Poner en espera"
+        initialCause="client"
+        onClose={() => setOfferHoldForTag(false)}
+        onConfirm={async (cause, note) => {
+          await apiClient.holdStage(Number(id), cause, note);
+          setOfferHoldForTag(false);
+          await fetchStageDetail();
+        }}
+      />
+
+      <Dialog open={offerResumeForTag} onClose={() => setOfferResumeForTag(false)}>
+        <DialogTitle>¿Reanudar la etapa?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Sacaste la etiqueta "Esperando respuesta cliente" y la etapa sigue en espera. Si la reanudás, se cierra el período de espera y los días vuelven a contar como trabajo.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOfferResumeForTag(false)}>Dejar en espera</Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              try {
+                await apiClient.resumeStage(Number(id));
+                setOfferResumeForTag(false);
+                await fetchStageDetail();
+              } catch (err) {
+                setOfferResumeForTag(false);
+                setError(err instanceof Error ? err.message : 'Error al reanudar la etapa');
+              }
+            }}
+          >
+            Reanudar
           </Button>
         </DialogActions>
       </Dialog>

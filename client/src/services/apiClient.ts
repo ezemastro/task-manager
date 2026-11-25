@@ -129,6 +129,8 @@ export interface StageCycle {
 
 export interface StageDetail extends StageAttributes {
   id: number;
+  /** Período de espera abierto, si la etapa está en espera. */
+  open_hold?: HoldPeriod | null;
   project_id: number;
   template_id?: number;
   name: string;
@@ -209,7 +211,10 @@ export interface DeadlineChange {
 
 export interface ProjectSummaryStage {
   stage_name: string;
+  /** Días de trabajo de la etapa, sin los días en espera. */
   total_days: number;
+  /** Días en espera descontados de total_days. */
+  waiting_days?: number;
   delayed_cycles: number;
   counts_work_time?: boolean;
   is_control?: boolean;
@@ -223,6 +228,8 @@ export interface ProjectSummary {
   stages: ProjectSummaryStage[];
   /** Días totales solo de las etapas que suman tiempo de trabajo. */
   work_days?: number;
+  /** Días en espera descontados de work_days. */
+  waiting_days_excluded?: number;
   deliveries?: {
     delivered: number;
     with_commitment: number;

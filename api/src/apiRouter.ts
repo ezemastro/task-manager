@@ -1001,6 +1001,30 @@ function calendarDurationDays(startedAt: string | null | undefined, endedAt: str
   return Math.max(0, Math.round((finishedMillis - startedMillis) / 86400000));
 }
 
+// Días de trabajo de los ciclos de una etapa sin contar las esperas: se
+// descuentan los días en que la etapa estuvo "en espera" o el proyecto
+// paralizado mientras un ciclo estaba abierto. Un mismo día cuenta una sola vez.
+interface CycleSpan { started_at: string | null; ended_at: string | null }
+function cycleWorkDays(cycles: CycleSpan[], holds: HoldRow[], stageId: number, now: Date = new Date()) {
+  const today = businessCalendarDate(now.toISOString()) as string;
+  const farFuture = '9999-12-31';
+  const waitingDays = new Set<string>();
+  holds
+    .filter((hold) => hold.stage_id === stageId || hold.stage_id === null)
+    .forEach((hold) => addCalendarDays(waitingDays, businessCalendarDate(hold.started_at), businessCalendarDate(hold.ended_at) ?? today, farFuture));
+  let gross = 0;
+  let waiting = 0;
+  cycles.forEach((cycle) => {
+    const from = businessCalendarDate(cycle.started_at);
+    if (!from) return;
+    const cycleDays = new Set<string>();
+    addCalendarDays(cycleDays, from, businessCalendarDate(cycle.ended_at) ?? today, farFuture);
+    gross += cycleDays.size;
+    cycleDays.forEach((day) => { if (waitingDays.has(day)) waiting += 1; });
+  });
+  return { gross_days: gross, waiting_days: waiting, work_days: gross - waiting };
+}
+
 // Resumen anual de proyectos completados y actividad de la organización.
 // Indicadores del Manual de Calidad, todos leídos del Resumen:
 // - Objetivo 1.1: % de proyectos entregados a tiempo en el año (entrega real
@@ -1110,6 +1134,14 @@ async function buildSummary(organizationId: number, { year, currentYear, project
     INNER JOIN projects p ON p.id = h.project_id
     WHERE p.organization_id = ?${typeFilter}
   `;
+  // Ciclos de las etapas de proyectos completados en el año (para descontar esperas).
+  const summaryCyclesSql = `
+    SELECT s.id as stage_id, s.name as stage_name, p.id as project_id, sc.started_at, sc.ended_at
+    FROM projects p
+    INNER JOIN stages s ON s.project_id = p.id
+    INNER JOIN stage_cycles sc ON sc.stage_id = s.id AND sc.project_id = p.id
+    WHERE p.organization_id = ? AND ${yearExpression('p.completed_date')} = ?${typeFilter}
+  `;
   // Clientes con proyectos iniciados (creados) en el año.
   const clientsSql = `
     SELECT c.id, c.name, COUNT(p.id) as projects
@@ -1121,13 +1153,14 @@ async function buildSummary(organizationId: number, { year, currentYear, project
   `;
 
   {
-    const [[counts], stages, deliveryRows, years, clients, holdRows] = await Promise.all([
+    const [[counts], stages, deliveryRows, years, clients, holdRows, cycleRows] = await Promise.all([
       summaryDbAll(countsSql, [String(year), String(year), organizationId, ...typeParams]),
       summaryDbAll(stagesSql, [organizationId, String(year), ...typeParams]),
       summaryDbAll(deliveryStagesSql, [organizationId, ...typeParams]),
       summaryDbAll(yearsSql, [organizationId, organizationId]),
       summaryDbAll<{ id: number; name: string; projects: number }>(clientsSql, [organizationId, String(year), ...typeParams]),
       summaryDbAll<HoldRow & { project_id: number }>(holdsSql, [organizationId, ...typeParams]),
+      summaryDbAll<CycleSpan & { stage_id: number; stage_name: string; project_id: number }>(summaryCyclesSql, [organizationId, String(year), ...typeParams]),
     ]);
     const holdsByProject = new Map<number, HoldRow[]>();
     holdRows.forEach((hold) => {
@@ -1135,6 +1168,31 @@ async function buildSummary(organizationId: number, { year, currentYear, project
       list.push(hold);
       holdsByProject.set(hold.project_id, list);
     });
+
+    // Días por etapa (agrupadas por nombre) descontando las esperas.
+    const cyclesByStage = new Map<number, { name: string; projectId: number; cycles: CycleSpan[] }>();
+    cycleRows.forEach((row) => {
+      const entry = cyclesByStage.get(row.stage_id) ?? { name: row.stage_name, projectId: row.project_id, cycles: [] };
+      entry.cycles.push(row);
+      cyclesByStage.set(row.stage_id, entry);
+    });
+    const daysByStageName = new Map<string, { work: number; waiting: number }>();
+    cyclesByStage.forEach((entry, stageId) => {
+      const result = cycleWorkDays(entry.cycles, holdsByProject.get(entry.projectId) ?? [], stageId);
+      const acc = daysByStageName.get(entry.name) ?? { work: 0, waiting: 0 };
+      acc.work += result.work_days;
+      acc.waiting += result.waiting_days;
+      daysByStageName.set(entry.name, acc);
+    });
+    const stageSummaries = stages.map((stage) => ({
+      stage_name: stage.stage_name,
+      // Días de trabajo (sin los días en espera) y días en espera descontados.
+      total_days: daysByStageName.get(stage.stage_name)?.work ?? 0,
+      waiting_days: daysByStageName.get(stage.stage_name)?.waiting ?? 0,
+      delayed_cycles: Number(stage.delayed_cycles || 0),
+      counts_work_time: Boolean(stage.counts_work_time),
+      is_control: Boolean(stage.is_control),
+    }));
 
     const byProject = new Map<number, { project: any; stages: Array<DeliveryStageRow & DelayCauseStageRow> }>();
     deliveryRows.forEach((row) => {
@@ -1190,18 +1248,15 @@ async function buildSummary(organizationId: number, { year, currentYear, project
       available_years: availableYears,
       projects_created: Number(counts?.created_count || 0),
       projects_completed: Number(counts?.completed_count || 0),
-      stages: stages.map((stage) => ({
-        stage_name: stage.stage_name,
-        total_days: Number(stage.total_days || 0),
-        delayed_cycles: Number(stage.delayed_cycles || 0),
-        counts_work_time: Boolean(stage.counts_work_time),
-        is_control: Boolean(stage.is_control),
-      })),
+      stages: stageSummaries,
       // Días de trabajo: solo las etapas que suman tiempo (excluye p. ej.
-      // la espera del cierre del cliente).
-      work_days: stages
+      // la espera del cierre del cliente) y sin los días en espera.
+      work_days: stageSummaries
         .filter((stage) => stage.counts_work_time)
-        .reduce((sum, stage) => sum + Number(stage.total_days || 0), 0),
+        .reduce((sum, stage) => sum + stage.total_days, 0),
+      waiting_days_excluded: stageSummaries
+        .filter((stage) => stage.counts_work_time)
+        .reduce((sum, stage) => sum + stage.waiting_days, 0),
       deliveries: {
         delivered: deliveredThisYear.length,
         with_commitment: measured.length,
@@ -1294,7 +1349,7 @@ apiRouter.get('/export/year', async (req: Request, res: Response) => {
   const activeInYear = `${projectYearExpression('p.created_at')} <= ? AND (p.completed_date IS NULL OR ${projectYearExpression('p.completed_date')} >= ?)`;
 
   try {
-    const [summary, projects, stages, holds, changes, [organization], [exporter]] = await Promise.all([
+    const [summary, projects, stages, holds, changes, exportCycles, [organization], [exporter]] = await Promise.all([
       buildSummary(organizationId, filters),
       summaryDbAll(`
         SELECT p.*, c.name as client_name, u.name as responsible_name
@@ -1329,6 +1384,12 @@ apiRouter.get('/export/year', async (req: Request, res: Response) => {
         LEFT JOIN users u ON u.id = dc.changed_by
         WHERE p.organization_id = ? AND ${activeInYear}${typeFilter}
         ORDER BY dc.changed_at, dc.id
+      `, scopeParams),
+      summaryDbAll(`
+        SELECT sc.stage_id, sc.started_at, sc.ended_at
+        FROM stage_cycles sc
+        INNER JOIN projects p ON p.id = sc.project_id
+        WHERE p.organization_id = ? AND ${activeInYear}${typeFilter}
       `, scopeParams),
       summaryDbAll('SELECT name FROM organizations WHERE id = ?', [organizationId]),
       summaryDbAll('SELECT name FROM users WHERE id = ?', [req.user!.userId]),
@@ -1381,7 +1442,7 @@ apiRouter.get('/export/year', async (req: Request, res: Response) => {
       ['Proyectos completados (denominador objetivo 1.3)', summary.projects_completed, ''],
       ['Proyectos creados', summary.projects_created, ''],
       ['Clientes recurrentes (más de 2 proyectos en el año)', summary.recurring_clients.count, summary.recurring_clients.clients.map((client) => `${client.name} (${client.projects})`).join(', ')],
-      ['Días de trabajo (etapas que suman tiempo)', summary.work_days, ''],
+      ['Días de trabajo (etapas que suman tiempo, sin esperas)', summary.work_days, summary.waiting_days_excluded > 0 ? `Se descontaron ${summary.waiting_days_excluded} días en espera` : ''],
       [],
       ['Días en espera por causa', 'Días', 'Atribuible a'],
       ...Object.entries(summary.hold_days_by_cause).map(([cause, days]) => [cause === 'unspecified' ? 'Sin causa' : causeLabel(cause), days, cause === 'unspecified' ? 'Estudio' : causeSide(cause)]),
@@ -1467,6 +1528,7 @@ apiRouter.get('/export/year', async (req: Request, res: Response) => {
       { header: 'Atribuible a', key: 'delay_side' },
       { header: 'Nota de la causa', key: 'delay_note', width: 30 },
       { header: 'Días en espera', key: 'hold_days' },
+      { header: 'Días de trabajo (sin esperas)', key: 'work_days' },
       { header: 'Motivo "No aplica"', key: 'na_reason', width: 30 },
     ], stages.map((stage) => {
       const stageHolds = (holdsByProject.get(stage.project_id) ?? []).filter((hold) => hold.stage_id === stage.id);
@@ -1490,6 +1552,7 @@ apiRouter.get('/export/year', async (req: Request, res: Response) => {
         delay_side: stage.delay_cause ? causeSide(stage.delay_cause) : '',
         delay_note: stage.delay_cause_note ?? '',
         hold_days: stageHolds.reduce((sum, hold) => sum + holdDays(hold), 0),
+        work_days: cycleWorkDays(exportCycles.filter((cycle) => cycle.stage_id === stage.id), holdsByProject.get(stage.project_id) ?? [], stage.id).work_days,
         na_reason: stage.not_applicable ? stage.not_applicable_reason ?? '' : '',
       };
     }));
@@ -3169,10 +3232,10 @@ apiRouter.get('/stages/:id', (req: Request, res: Response) => {
     INNER JOIN projects p ON s.project_id = p.id
     LEFT JOIN users u ON s.responsible_id = u.id
     LEFT JOIN clients c ON p.client_id = c.id
-    WHERE s.id = ?
+    WHERE s.id = ? AND p.organization_id = ?
   `;
 
-  db.get(stageSql, [id], (err, stage) => {
+  db.get(stageSql, [id, req.user!.organizationId], (err, stage) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -3205,7 +3268,10 @@ apiRouter.get('/stages/:id', (req: Request, res: Response) => {
           return res.status(500).json({ error: err.message });
         }
 
-        res.json({ ...stage, tags, comments });
+        db.get('SELECT id, cause, note, started_at FROM stage_holds WHERE stage_id = ? AND ended_at IS NULL', [id], (holdErr, openHold) => {
+          if (holdErr) return res.status(500).json({ error: holdErr.message });
+          res.json({ ...stage, tags, comments, open_hold: openHold ?? null });
+        });
       });
     });
   });
